@@ -54,7 +54,7 @@ task.spawn(function()
 end)
 
 local success, WindUI = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/Sentaidusty/dustyrails/refs/heads/main/main.lua"))()
+    return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 end)
 
 if not success then
