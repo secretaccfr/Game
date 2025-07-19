@@ -173,6 +173,8 @@ local Visual = GameSection:Tab({
     Locked = false
 })
 
+Window:SelectTab(1)
+
 local lplr = game:GetService("Players").LocalPlayer
 
 local function PlayerAimbot()
