@@ -1603,7 +1603,7 @@ local function InfiniteYield()
 end
 
 local function CopyDiscordInvite()
-    setclipboard("https://discord.gg/ANSrA2jDER")
+    setclipboard("https://discord.gg/tuffguys")
 end
 
 local function AutBonds()
@@ -1654,8 +1654,8 @@ Window:SelectTab(1)
 discordTab:Paragraph({
     Title = "Join Discord To Know Updates!",
     Desc = "Stay updated with the latest features and fixes",
-    Image = "rbxassetid://122545428580310",
-    Thumbnail = "rbxassetid://122545428580310",
+    Image = "rbxassetid://130506306640152",
+    Thumbnail = "rbxassetid://130506306640152",
     Buttons = {
         {
             Title = "Copy Invite",

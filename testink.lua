@@ -134,7 +134,7 @@ local UpdateLogs = MainSection:Tab({
 UpdateLogs:Paragraph({
     Title = "Changelogs V2.6",
     Desc = "[+] Added Anti Void\n[+] Added Crack Immunity (Buggy)\n[~] Fixed RLGL GodMode\n[+] Added Guard Aimbot\n[+] Added Player Aimbot\n[~] Fixed Reveal Safe Glass\n[~] Fixed Auto Choke Mingle\n[+] Added Hider Kill Aura\n[~] Improved Bring Guards\n[+] Added Kill Aura (Bottle,Knife,Fork,Power Hold)\n[+] Added Bypass Anti Cheat\n[+] Added Help Injured Players RLGL\n[+] Added Tp End Glass Bridge\n[~] Improved Hunter Esp and Hider Esp\n[~] Moved Hide and Seek Esp's In Visual Tab",
-    Image = "rbxassetid://122545428580310",
+    Image = "rbxassetid://130506306640152",
 })
 
 GameSection = Window:Section({
@@ -296,8 +296,8 @@ end
 Discord:Paragraph({
     Title = "Join Discord To Know Updates!",
     Desc = "Stay updated with the latest features and fixes",
-    Image = "rbxassetid://122545428580310",
-    Thumbnail = "rbxassetid://122545428580310",
+    Image = "rbxassetid://130506306640152",
+    Thumbnail = "rbxassetid://130506306640152",
     Buttons = {
         {
             Title = "Copy Invite",
