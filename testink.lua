@@ -2693,156 +2693,220 @@ Visual:Toggle({
 Visual:Section({Title = "Hide and Seek"})
 Visual:Divider()
 
--- ESP Variables
-local hiderESPEnabled = false
-local hunterESPEnabled = false
+-- ESP Settings
+local HidersESPEnabled = false  -- Separate toggle for Hiders
+local HuntersESPEnabled = false  -- Separate toggle for Hunters
+local HidersColor = Color3.fromRGB(0, 255, 230)  -- Cyan
+local HuntersColor = Color3.fromRGB(255, 0, 0)   -- Red
+
+-- Store ESP highlights
 local hiderHighlights = {}
 local hunterHighlights = {}
 
--- ESP Functions (exactly as you provided)
-local function HiderESP(player)
-    if player:GetAttribute("IsHider") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        -- Clear existing highlight if any
-        if hiderHighlights[player] then
-            hiderHighlights[player]:Destroy()
-            hiderHighlights[player] = nil
+-- Function to check if a tool matches role criteria
+local function isHunterTool(tool)
+    return tool:IsA("Tool") and string.find(string.lower(tool.Name), "knife")
+end
+
+local function isHiderTool(tool)
+    if tool:IsA("Tool") then
+        local toolName = string.lower(tool.Name)
+        return string.find(toolName, "key") or string.find(toolName, "dodge")
+    end
+    return false
+end
+
+-- Function to determine player role by checking both backpack and equipped tools
+local function getPlayerRole(player)
+    if player == LocalPlayer then return nil end -- Skip local player
+    
+    -- Check workspace.Live first (equipped tools)
+    local liveChar = workspace.Live:FindFirstChild(player.Name)
+    if liveChar then
+        for _, tool in ipairs(liveChar:GetChildren()) do
+            if isHunterTool(tool) then return "Hunter" end
+            if isHiderTool(tool) then return "Hider" end
         end
+    end
+    
+    -- Check backpack if no equipped tools found
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if isHunterTool(tool) then return "Hunter" end
+            if isHiderTool(tool) then return "Hider" end
+        end
+    end
+    
+    return nil
+end
 
-        if not hiderESPEnabled then return end
+-- Function to create/update ESP (simplified version without billboards)
+local function applyESP(character, role)
+    if not character or not character.Parent then return end
 
-        local highlight = Instance.new("Highlight")
-        highlight.Adornee = player.Character
-        highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Green for hiders
-        highlight.OutlineColor = Color3.new(1, 1, 1)
-        highlight.FillTransparency = 0.5
-        highlight.Parent = player.Character
-        hiderHighlights[player] = highlight
+    -- Clear existing ESP if any
+    if role == "Hider" and hiderHighlights[character] then
+        hiderHighlights[character]:Destroy()
+        hiderHighlights[character] = nil
+    elseif role == "Hunter" and hunterHighlights[character] then
+        hunterHighlights[character]:Destroy()
+        hunterHighlights[character] = nil
+    end
 
-        -- Cleanup when player is no longer a hider
-        player:GetAttributeChangedSignal("IsHider"):Connect(function()
-            if hiderHighlights[player] then 
-                hiderHighlights[player]:Destroy()
-                hiderHighlights[player] = nil
-            end
-        end)
+    -- Only apply if the corresponding toggle is enabled
+    if (role == "Hider" and not HidersESPEnabled) or (role == "Hunter" and not HuntersESPEnabled) then
+        return
+    end
+
+    -- Create highlight (simple version like the old ESP)
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = character
+    highlight.FillColor = role == "Hider" and HidersColor or HuntersColor
+    highlight.OutlineColor = Color3.new(1, 1, 1)
+    highlight.FillTransparency = 0.5
+    highlight.Parent = character
+    
+    -- Store in the appropriate table
+    if role == "Hider" then
+        hiderHighlights[character] = highlight
+    else
+        hunterHighlights[character] = highlight
     end
 end
 
-local function HunterESP(player)
-    if player:GetAttribute("IsHunter") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        -- Clear existing highlight if any
-        if hunterHighlights[player] then
-            hunterHighlights[player]:Destroy()
-            hunterHighlights[player] = nil
+-- Function to clear ESP
+local function clearESP()
+    for character, highlight in pairs(hiderHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
         end
-
-        if not hunterESPEnabled then return end
-
-        local highlight = Instance.new("Highlight")
-        highlight.Adornee = player.Character
-        highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Red for hunters
-        highlight.OutlineColor = Color3.new(1, 1, 1)
-        highlight.FillTransparency = 0.5
-        highlight.Parent = player.Character
-        hunterHighlights[player] = highlight
-
-        -- Cleanup when player is no longer a hunter
-        player:GetAttributeChangedSignal("IsHunter"):Connect(function()
-            if hunterHighlights[player] then 
-                hunterHighlights[player]:Destroy()
-                hunterHighlights[player] = nil
-            end
-        end)
-    end
-end
-
--- Apply ESP to all players
-local function ApplyHideAndSeekESP()
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            HiderESP(player)
-            HunterESP(player)
-        end
-    end
-end
-
--- Cleanup all ESP
-local function CleanupHideAndSeekESP()
-    for player, highlight in pairs(hiderHighlights) do
-        if highlight then highlight:Destroy() end
-    end
-    for player, highlight in pairs(hunterHighlights) do
-        if highlight then highlight:Destroy() end
     end
     table.clear(hiderHighlights)
+    
+    for character, highlight in pairs(hunterHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
     table.clear(hunterHighlights)
 end
 
--- Player Added/Removed Handlers
-local function OnPlayerAdded(player)
+-- Track tool changes in workspace.Live characters
+local function trackLiveCharacter(player)
+    local function checkCharacter(character)
+        -- Check for existing tools
+        local role = getPlayerRole(player)
+        if role then
+            applyESP(character, role)
+        end
+        
+        -- Track tool additions/removals
+        character.ChildAdded:Connect(function(child)
+            if isHunterTool(child) then
+                applyESP(character, "Hunter")
+            elseif isHiderTool(child) then
+                applyESP(character, "Hider")
+            end
+        end)
+        
+        character.ChildRemoved:Connect(function(child)
+            if isHunterTool(child) or isHiderTool(child) then
+                -- Re-check role after tool removal
+                local newRole = getPlayerRole(player)
+                if newRole then
+                    applyESP(character, newRole)
+                else
+                    -- Remove ESP if no longer has role-specific tools
+                    if hiderHighlights[character] then
+                        hiderHighlights[character]:Destroy()
+                        hiderHighlights[character] = nil
+                    end
+                    if hunterHighlights[character] then
+                        hunterHighlights[character]:Destroy()
+                        hunterHighlights[character] = nil
+                    end
+                end
+            end
+        end)
+    end
+    
+    -- Check if character already exists in workspace.Live
+    local liveChar = workspace.Live:FindFirstChild(player.Name)
+    if liveChar then
+        checkCharacter(liveChar)
+    end
+    
+    -- Track when character appears in workspace.Live
+    workspace.Live.ChildAdded:Connect(function(child)
+        if child.Name == player.Name then
+            checkCharacter(child)
+        end
+    end)
+end
+
+-- Handle players
+local function updatePlayers()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end -- Skip local player
+
+        trackLiveCharacter(player)
+        
+        -- Also track backpack changes (for when tools are unequipped)
+        player:GetPropertyChangedSignal("Backpack"):Connect(function()
+            task.wait(0.5) -- Small delay
+            if player.Character then
+                local role = getPlayerRole(player)
+                if role then
+                    applyESP(player.Character, role)
+                else
+                    -- Remove ESP if no longer has role-specific tools
+                    if hiderHighlights[player.Character] then
+                        hiderHighlights[player.Character]:Destroy()
+                        hiderHighlights[player.Character] = nil
+                    end
+                    if hunterHighlights[player.Character] then
+                        hunterHighlights[player.Character]:Destroy()
+                        hunterHighlights[player.Character] = nil
+                    end
+                end
+            end
+        end)
+    end
+end
+
+-- Main update function
+local function updateESP()
+    clearESP()
+    if not HidersESPEnabled and not HuntersESPEnabled then return end
+    updatePlayers()
+end
+
+-- Initialize
+Players.PlayerAdded:Connect(function(player)
+    if player == LocalPlayer then return end
+    trackLiveCharacter(player)
+    updateESP()
+end)
+
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(updateESP) -- Re-apply on respawn
+
+-- Initial scan
+for _, player in ipairs(Players:GetPlayers()) do
     if player ~= LocalPlayer then
-        HiderESP(player)
-        HunterESP(player)
+        trackLiveCharacter(player)
     end
 end
+updateESP()
 
-local function OnPlayerRemoving(player)
-    if hiderHighlights[player] then
-        hiderHighlights[player]:Destroy()
-        hiderHighlights[player] = nil
-    end
-    if hunterHighlights[player] then
-        hunterHighlights[player]:Destroy()
-        hunterHighlights[player] = nil
-    end
-end
-
--- Initialize ESP connections
-local function InitializeESP()
-    -- Cleanup existing ESP
-    CleanupHideAndSeekESP()
-    
-    -- Apply to existing players
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            HiderESP(player)
-            HunterESP(player)
-        end
-    end
-    
-    -- Connect signals
-    Players.PlayerAdded:Connect(OnPlayerAdded)
-    Players.PlayerRemoving:Connect(OnPlayerRemoving)
-    
-    -- Track attribute changes
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            player:GetAttributeChangedSignal("IsHider"):Connect(function()
-                HiderESP(player)
-            end)
-            player:GetAttributeChangedSignal("IsHunter"):Connect(function()
-                HunterESP(player)
-            end)
-        end
-    end
-end
-
--- Toggles
+-- Add to Visual tab
 Visual:Toggle({
     Title = "ESP Hiders",
-    Desc = "Highlights hiders in green",
+    Desc = "Highlights hiders in cyan",
     Value = false,
     Callback = function(state)
-        hiderESPEnabled = state
-        if state then
-            InitializeESP()
-        else
-            -- Only clean up hider highlights
-            for player, highlight in pairs(hiderHighlights) do
-                if highlight then highlight:Destroy() end
-            end
-            table.clear(hiderHighlights)
-        end
+        HidersESPEnabled = state
+        updateESP()
     end
 })
 
@@ -2851,16 +2915,8 @@ Visual:Toggle({
     Desc = "Highlights hunters in red",
     Value = false,
     Callback = function(state)
-        hunterESPEnabled = state
-        if state then
-            InitializeESP()
-        else
-            -- Only clean up hunter highlights
-            for player, highlight in pairs(hunterHighlights) do
-                if highlight then highlight:Destroy() end
-            end
-            table.clear(hunterHighlights)
-        end
+        HuntersESPEnabled = state
+        updateESP()
     end
 })
 
