@@ -296,7 +296,7 @@ local Window = WindUI:CreateWindow({
     Folder = "ForsakenTuff",
     Size = UDim2.fromOffset(580, 380),
     Transparent = true,
-    Theme = "Black",
+    Theme = "Dark",
     SideBarWidth = 200,
 })
 

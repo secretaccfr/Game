@@ -93,7 +93,7 @@ local Window = WindUI:CreateWindow({
     Folder = "InkGameAgsy",
     Size = UDim2.fromOffset(580, 380),
     Transparent = true,
-    Theme = "Black",
+    Theme = "Dark",
     SideBarWidth = 200,
 })
 
