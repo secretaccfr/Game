@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V3 Executed",
+            ["title"] = "Ink Game V3.1 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -86,7 +86,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V3",
+    Title = "Tuff Guys | Ink Game V3.1",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -102,7 +102,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V3",
+    Title = "Tuff Guys | Ink Game V3.1",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -132,8 +132,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V3",
-    Desc = "[+] Added Jump Rope Tp Finish\n[-] Removed Help Injured Players\n[~] Fixed Kill Aura and Hider Kill Aura\n[+] Added Anti Ragdoll\n[-] Removed Lights Out Auto Kill\n[~] Fixed Auto Pull Rope\n[~] Fixed Player ESP\n[~] Fixed Hunter and Hider ESP\n[~] Fixed Crashing Sometimes",
+    Title = "Changelogs V3.1",
+    Desc = "[+] Added Jump Rope Auto Perfect Jump (Not Tested Yet Prob Some Bugs)\n[~] Improved Hider and Hunter ESP\n[~] Improved Kill Aura and Hider Kill Aura\n[~] Renamed Jump Power to Jump Boost\n[~] Fixed Jump Boost\n[+] Added Speed Boost (Misc Tab)",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -733,28 +733,105 @@ end)
 Main:Section({Title = "Jump Rope"})
 Main:Divider()
 
+-- Complete Jump Rope Button
 Main:Button({
     Title = "Complete Jump Rope",
-    Desc = "Teleports to finish",
+    Desc = "Teleports to finish line position",
     Callback = function()
         local character = LocalPlayer.Character
         if character and character:FindFirstChild("HumanoidRootPart") then
-            -- Convert position to CFrame (adding slight Y offset to prevent clipping)
             local targetPosition = Vector3.new(
                 723.2041015625, 
                 197.14407348632812 + 3, -- +3 to Y to prevent ground clipping
                 922.08349609375
             )
             character:SetPrimaryPartCFrame(CFrame.new(targetPosition))
-        else
-            WindUI:Notify({
-                Title = "Error",
-                Description = "Character not found or missing HumanoidRootPart",
-                Duration = 5
-            })
         end
     end
 })
+
+-- Auto Perfect Jump Toggle (Game-Specific Version)
+local autoJumpEnabled = false
+local autoJumpConnection = nil
+
+Main:Toggle({
+    Title = "Auto Perfect Jump",
+    Desc = "Automatically perfectly jumps",
+    Value = false,
+    Callback = function(state)
+        autoJumpEnabled = state
+        if state then
+            -- Set jump power to 65 for better jumps
+            pcall(function()
+                local player = game:GetService("Players").LocalPlayer
+                local character = workspace.Live:FindFirstChild(player.Name)
+                if character then
+                    local jumpPower = character:FindFirstChild("JumpPowerAmount")
+                    if jumpPower then
+                        jumpPower.Value = 65
+                    end
+                end
+            end)
+            
+            autoJumpConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    -- Check if current game is Jump Rope
+                    local currentGame = workspace:FindFirstChild("Values") and workspace.Values:FindFirstChild("CurrentGame")
+                    if not currentGame or currentGame.Value ~= "JumpRope" then return end
+                    
+                    -- Jump timing logic
+                    local currentTime = tick()
+                    if not getgenv().lastJumpTime or (currentTime - getgenv().lastJumpTime) >= 2.5 then
+                        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                        if humanoid then
+                            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                            getgenv().lastJumpTime = currentTime
+                        end
+                    end
+                end)
+            end)
+        else
+            if autoJumpConnection then
+                autoJumpConnection:Disconnect()
+                autoJumpConnection = nil
+            end
+            
+            -- Reset jump power when disabled
+            pcall(function()
+                local player = game:GetService("Players").LocalPlayer
+                local character = workspace.Live:FindFirstChild(player.Name)
+                if character then
+                    local jumpPower = character:FindFirstChild("JumpPowerAmount")
+                    if jumpPower then
+                        jumpPower.Value = 50 -- Default value
+                    end
+                end
+            end)
+        end
+    end
+})
+
+-- Auto-reconnect on character respawn
+LocalPlayer.CharacterAdded:Connect(function(character)
+    if autoJumpEnabled then
+        task.wait(1) -- Wait for character to load
+        
+        -- Set jump power to 65 again
+        pcall(function()
+            local player = game:GetService("Players").LocalPlayer
+            local character = workspace.Live:FindFirstChild(player.Name)
+            if character then
+                local jumpPower = character:FindFirstChild("JumpPowerAmount")
+                if jumpPower then
+                    jumpPower.Value = 65
+                end
+            end
+        end)
+        
+        local toggle = Main:FindFirstChild("Auto Perfect Jump")
+        if toggle then toggle.Callback(true) end
+    end
+end)
 
 -- Hide and Seek Section
 Main:Section({Title = "Hide and Seek"})
@@ -814,16 +891,17 @@ Main:Toggle({
     end
 })
 
+-- Optimized Hider Kill Aura (Uses IsHider Attribute)
 local hiderKillauraEnabled = false
 local hiderKillauraLoop = nil
-local hiderAttackDelay = 0.3 -- Slightly slower than normal killaura
+local hiderKillauraSpeed = 0.01 -- Adjust for faster/slower teleportation
 
 local function getKnife()
     -- Check character first
     local knife = LocalPlayer.Character:FindFirstChild("Knife")
     if knife then return knife end
     
-    -- Check backpack
+    -- Check backpack as fallback (but prioritize equipped)
     local backpack = LocalPlayer:FindFirstChild("Backpack")
     if backpack then
         knife = backpack:FindFirstChild("Knife")
@@ -833,24 +911,39 @@ local function getKnife()
     return nil
 end
 
--- Updated Hider Killaura with smooth tweening
-local function HiderKillaura(enabled)
+local function attackHider(knife, targetCharacter)
+    -- Auto-equip if needed
+    if knife.Parent ~= LocalPlayer.Character then
+        LocalPlayer.Character.Humanoid:EquipTool(knife)
+    end
+    
+    -- Simulate M1 click
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+    task.wait(0.05)
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+    
+    -- Fire attack remote
+    local args = {"UsingMoveCustom", knife, nil, {Clicked = true}}
+    pcall(function()
+        game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args))
+    end)
+end
+
+local function EnhancedHiderKillaura(enabled)
     if enabled then
         hiderKillauraLoop = task.spawn(function()
-            local TweenService = game:GetService("TweenService")
-            while task.wait(hiderAttackDelay) do
+            while task.wait(hiderKillauraSpeed) do
                 local knife = getKnife()
-                if not knife then
-                    warn("[Hider Killaura] No knife equipped!")
-                    continue
-                end
+                if not knife then continue end
                 
-                -- Find closest living hider
+                -- Find closest living hider using IsHider attribute
                 local closestHider, closestDistance = nil, math.huge
                 local myRoot = LocalPlayer.Character.HumanoidRootPart
                 
                 for _, player in ipairs(Players:GetPlayers()) do
-                    if player ~= LocalPlayer and player:GetAttribute("IsHider") and player.Character then
+                    -- Check IsHider attribute instead of name
+                    if player ~= LocalPlayer and player:GetAttribute("IsHider") == true and player.Character then
                         local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
                         local targetRoot = player.Character:FindFirstChild("HumanoidRootPart")
                         
@@ -868,30 +961,14 @@ local function HiderKillaura(enabled)
                 if closestHider and closestHider.Character then
                     local targetRoot = closestHider.Character.HumanoidRootPart
                     
-                    -- Calculate position behind hider
-                    local behindOffset = targetRoot.CFrame.LookVector * -3
+                    -- Calculate position 1 stud behind hider
+                    local behindOffset = targetRoot.CFrame.LookVector * -1
                     local targetCFrame = CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position)
                     
-                    -- Smooth tween to target
-                    local tweenInfo = TweenInfo.new(
-                        0.2, -- Duration
-                        Enum.EasingStyle.Linear,
-                        Enum.EasingDirection.Out,
-                        0, -- Repeat count
-                        false, -- Reverses
-                        0 -- Delay
-                    )
+                    -- Instant teleport (no tweening)
+                    LocalPlayer.Character:PivotTo(targetCFrame)
                     
-                    local tween = TweenService:Create(
-                        myRoot,
-                        tweenInfo,
-                        {CFrame = targetCFrame}
-                    )
-                    
-                    tween:Play()
-                    tween.Completed:Wait()
-                    
-                    -- Attack with knife
+                    -- Continuous attack
                     attackHider(knife, closestHider.Character)
                 end
             end
@@ -906,17 +983,17 @@ end
 
 Main:Toggle({
     Title = "Hider Killaura",
-    Desc = "Teleports to Hiders and auto attacks",
+    Desc = "Teleports behind and continuously attacks nearest hider",
     Value = false,
     Callback = function(state)
         hiderKillauraEnabled = state
-        HiderKillaura(state)
+        EnhancedHiderKillaura(state)
         
         -- Reconnect on respawn
         if state then
             LocalPlayer.CharacterAdded:Connect(function()
                 task.wait(1) -- Wait for character to load
-                if hiderKillauraEnabled then HiderKillaura(true) end
+                if hiderKillauraEnabled then EnhancedHiderKillaura(true) end
             end)
         end
     end
@@ -1262,14 +1339,14 @@ Combat:Toggle({
     end
 })
 
+-- Enhanced Kill Aura with Loop Teleport
 local killAuraEnabled = false
 local killAuraLoop = nil
-local attackDelay = 0.2
-local supportedWeapons = {"Knife", "Bottle", "Fork", "Power Hold"} -- Add more as needed
+local killAuraSpeed = 0.01 -- Adjust for faster/slower teleportation (lower = faster)
 
 local function getEquippedWeapon()
     -- Check character first
-    for _, weaponName in pairs(supportedWeapons) do
+    for _, weaponName in pairs({"Knife", "Bottle", "Fork", "Power Hold"}) do
         local weapon = LocalPlayer.Character:FindFirstChild(weaponName)
         if weapon then return weapon end
     end
@@ -1277,7 +1354,7 @@ local function getEquippedWeapon()
     -- Check backpack if not equipped
     local backpack = LocalPlayer:FindFirstChild("Backpack")
     if backpack then
-        for _, weaponName in pairs(supportedWeapons) do
+        for _, weaponName in pairs({"Knife", "Bottle", "Fork", "Power Hold"}) do
             local weapon = backpack:FindFirstChild(weaponName)
             if weapon then return weapon end
         end
@@ -1286,12 +1363,10 @@ local function getEquippedWeapon()
     return nil
 end
 
--- Updated Kill Aura function with smooth tweening
 local function attackTarget(weapon, target)
     -- Auto-equip if needed
     if weapon.Parent ~= LocalPlayer.Character then
         LocalPlayer.Character.Humanoid:EquipTool(weapon)
-        task.wait(0.1) -- Small delay for equip animation
     end
     
     -- Simulate M1 click
@@ -1307,16 +1382,12 @@ local function attackTarget(weapon, target)
     end)
 end
 
-local function PlayerAttach(enabled)
+local function EnhancedKillAura(enabled)
     if enabled then
         killAuraLoop = task.spawn(function()
-            local TweenService = game:GetService("TweenService")
-            while task.wait(attackDelay) do
+            while task.wait(killAuraSpeed) do
                 local weapon = getEquippedWeapon()
-                if not weapon then
-                    warn("[Kill Aura] No supported weapon equipped!")
-                    continue
-                end
+                if not weapon then continue end
                 
                 -- Find closest living player
                 local closestPlayer, closestDistance = nil, math.huge
@@ -1341,30 +1412,14 @@ local function PlayerAttach(enabled)
                 if closestPlayer and closestPlayer.Character then
                     local targetRoot = closestPlayer.Character.HumanoidRootPart
                     
-                    -- Calculate position behind target
-                    local behindOffset = targetRoot.CFrame.LookVector * -3
+                    -- Calculate position 1 stud behind target
+                    local behindOffset = targetRoot.CFrame.LookVector * -1
                     local targetCFrame = CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position)
                     
-                    -- Smooth tween to target
-                    local tweenInfo = TweenInfo.new(
-                        0.2, -- Duration
-                        Enum.EasingStyle.Linear,
-                        Enum.EasingDirection.Out,
-                        0, -- Repeat count
-                        false, -- Reverses
-                        0 -- Delay
-                    )
+                    -- Instant teleport (no tweening)
+                    LocalPlayer.Character:PivotTo(targetCFrame)
                     
-                    local tween = TweenService:Create(
-                        myRoot,
-                        tweenInfo,
-                        {CFrame = targetCFrame}
-                    )
-                    
-                    tween:Play()
-                    tween.Completed:Wait()
-                    
-                    -- Attack with equipped weapon
+                    -- Continuous attack
                     attackTarget(weapon, closestPlayer.Character)
                 end
             end
@@ -1379,17 +1434,17 @@ end
 
 Combat:Toggle({
     Title = "Kill Aura",
-    Desc = "Knife/Bottle/Fork/Power Hold and Auto Attacks",
+    Desc = "Teleports behind and continuously attacks nearest player",
     Value = false,
     Callback = function(state)
         killAuraEnabled = state
-        PlayerAttach(state)
+        EnhancedKillAura(state)
         
         -- Reconnect on respawn
         if state then
             LocalPlayer.CharacterAdded:Connect(function()
                 task.wait(1)
-                if killAuraEnabled then PlayerAttach(true) end
+                if killAuraEnabled then EnhancedKillAura(true) end
             end)
         end
     end
@@ -2325,36 +2380,51 @@ Misc:Toggle({
     end
 })
 
-Misc:Slider({
-    Title = "Walk Speed",
-    Value = {
-        Min = 16,
-        Max = 100,
-        Default = 16,
-    },
-    Callback = function(value)
-        getgenv().currentWalkSpeed = value
-        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            humanoid.WalkSpeed = value
-        end
+Misc:Button({
+    Title = "Speed Boost",
+    Desc = "Boosts your speed",
+    Callback = function()
+        pcall(function()
+            local boosts = game:GetService("Players").LocalPlayer:WaitForChild("Boosts")
+            if boosts:FindFirstChild("Faster Sprint") then
+                boosts["Faster Sprint"].Value = 10
+            end
+        end)
     end
 })
 
+-- Jump Boost Slider
 Misc:Slider({
-    Title = "Jump Power",
+    Title = "Jump Boost",
+    Desc = "Boosts your jump power",
     Value = {
         Min = 50,
-        Max = 200,
+        Max = 100,
         Default = 50,
     },
     Callback = function(value)
-        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            humanoid.JumpPower = value
-        end
+        pcall(function()
+            local player = game:GetService("Players").LocalPlayer
+            local character = workspace.Live:FindFirstChild(player.Name)
+            if character then
+                local jumpPower = character:FindFirstChild("JumpPowerAmount")
+                if jumpPower then
+                    jumpPower.Value = value
+                end
+            end
+        end)
     end
 })
+
+-- Auto-reapply on character respawn
+LocalPlayer.CharacterAdded:Connect(function(character)
+    task.wait(1) -- Wait for character to load
+    local slider = Misc:FindFirstChild("Jump Boost")
+    if slider then
+        -- Reapply the current slider value
+        slider.Callback(slider:GetValue())
+    end
+end)
 
 -- Anti AFK Toggle
 local antiAFKEnabled = false
@@ -2662,11 +2732,13 @@ Visual:Toggle({
 Visual:Section({Title = "Hide and Seek"})
 Visual:Divider()
 
--- Fixed Hider/Hunter ESP (Using Attributes)
+-- Enhanced Hider/Hunter ESP with Billboards
 local HidersESPEnabled = false
 local HuntersESPEnabled = false
 local hiderHighlights = {}
 local hunterHighlights = {}
+local hiderBillboards = {}
+local hunterBillboards = {}
 
 -- Colors
 local HIDER_COLOR = Color3.fromRGB(0, 170, 255)  -- Blue
@@ -2684,6 +2756,14 @@ local function applyESP(player)
         hunterHighlights[player]:Destroy()
         hunterHighlights[player] = nil
     end
+    if hiderBillboards[player] then
+        hiderBillboards[player]:Destroy()
+        hiderBillboards[player] = nil
+    end
+    if hunterBillboards[player] then
+        hunterBillboards[player]:Destroy()
+        hunterBillboards[player] = nil
+    end
 
     local character = player.Character or player.CharacterAdded:Wait()
     if not character then return end
@@ -2694,6 +2774,7 @@ local function applyESP(player)
 
     -- Create highlight if enabled
     if (isHider and HidersESPEnabled) or (isHunter and HuntersESPEnabled) then
+        -- Create highlight
         local highlight = Instance.new("Highlight")
         highlight.Adornee = character
         highlight.FillColor = isHider and HIDER_COLOR or HUNTER_COLOR
@@ -2701,11 +2782,35 @@ local function applyESP(player)
         highlight.FillTransparency = 0.5
         highlight.Parent = character
 
-        -- Store in correct table
+        -- Create billboard label
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "RoleLabel"
+        billboard.Adornee = character:WaitForChild("Head") or character:WaitForChild("HumanoidRootPart")
+        billboard.Size = UDim2.new(0, 100, 0, 40)
+        billboard.StudsOffset = Vector3.new(0, 3, 0)
+        billboard.AlwaysOnTop = true
+        billboard.LightInfluence = 1
+        billboard.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+        local label = Instance.new("TextLabel")
+        label.Text = isHider and "HIDER" or "HUNTER"
+        label.TextColor3 = isHider and HIDER_COLOR or HUNTER_COLOR
+        label.TextSize = 14
+        label.Font = Enum.Font.Oswald
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.TextStrokeTransparency = 0.5
+        label.TextStrokeColor3 = Color3.new(0, 0, 0)
+        label.Parent = billboard
+        billboard.Parent = character
+
+        -- Store in correct tables
         if isHider then
             hiderHighlights[player] = highlight
+            hiderBillboards[player] = billboard
         else
             hunterHighlights[player] = highlight
+            hunterBillboards[player] = billboard
         end
     end
 
@@ -2735,6 +2840,14 @@ Players.PlayerRemoving:Connect(function(player)
         hunterHighlights[player]:Destroy()
         hunterHighlights[player] = nil
     end
+    if hiderBillboards[player] then
+        hiderBillboards[player]:Destroy()
+        hiderBillboards[player] = nil
+    end
+    if hunterBillboards[player] then
+        hunterBillboards[player]:Destroy()
+        hunterBillboards[player] = nil
+    end
 end)
 
 -- Add to Visual Tab
@@ -2757,6 +2870,11 @@ Visual:Toggle({
         updateAllESP()
     end
 })
+
+-- Initial scan
+for _, player in ipairs(Players:GetPlayers()) do
+    applyESP(player)
+end
 
 -- Initial scan
 for _, player in ipairs(Players:GetPlayers()) do
