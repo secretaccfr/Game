@@ -781,7 +781,7 @@ Main:Toggle({
                     
                     -- Jump timing logic
                     local currentTime = tick()
-                    if not getgenv().lastJumpTime or (currentTime - getgenv().lastJumpTime) >= 2.8 then
+                    if not getgenv().lastJumpTime or (currentTime - getgenv().lastJumpTime) >= 4.1 then
                         local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
                         if humanoid then
                             humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
