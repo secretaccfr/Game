@@ -374,8 +374,17 @@ Main:Toggle({
             local hrp = character:WaitForChild("HumanoidRootPart")
             
             getgenv().touchFlingConnection = hrp.Touched:Connect(function(hit)
-                if hiddenfling and hit.Parent and hit.Parent:FindFirstChildOfClass("Humanoid") then
-                    fling()
+                if hiddenfling and hit.Parent then
+                    -- Check if the hit part belongs to another player
+                    local player = Players:GetPlayerFromCharacter(hit.Parent)
+                    if player and player ~= LocalPlayer then
+                        -- Get the other player's HRP
+                        local targetHrp = hit.Parent:FindFirstChild("HumanoidRootPart")
+                        if targetHrp then
+                            -- Apply fling to the other player
+                            targetHrp.Velocity = Vector3.new(0, flingPower, 0)
+                        end
+                    end
                 end
             end)
         else
