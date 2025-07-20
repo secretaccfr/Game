@@ -2716,25 +2716,31 @@ local function isHiderTool(tool)
     return false
 end
 
--- Function to determine player role by checking both backpack and equipped tools
+-- Fixed Hide and Seek ESP
 local function getPlayerRole(player)
     if player == LocalPlayer then return nil end -- Skip local player
     
-    -- Check workspace.Live first (equipped tools)
+    -- 1. First check equipped tools in workspace.Live
     local liveChar = workspace.Live:FindFirstChild(player.Name)
     if liveChar then
         for _, tool in ipairs(liveChar:GetChildren()) do
-            if isHunterTool(tool) then return "Hunter" end
-            if isHiderTool(tool) then return "Hider" end
+            if tool:IsA("Tool") then
+                local toolName = string.lower(tool.Name)
+                if string.find(toolName, "knife") then return "Hunter" end
+                if string.find(toolName, "key") or string.find(toolName, "dodge") then return "Hider" end
+            end
         end
     end
     
-    -- Check backpack if no equipped tools found
+    -- 2. Fixed backpack check - no more property access
     local backpack = player:FindFirstChild("Backpack")
     if backpack then
         for _, tool in ipairs(backpack:GetChildren()) do
-            if isHunterTool(tool) then return "Hunter" end
-            if isHiderTool(tool) then return "Hider" end
+            if tool:IsA("Tool") then
+                local toolName = string.lower(tool.Name)
+                if string.find(toolName, "knife") then return "Hunter" end
+                if string.find(toolName, "key") or string.find(toolName, "dodge") then return "Hider" end
+            end
         end
     end
     
