@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V2.6 Executed",
+            ["title"] = "Ink Game V3 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -86,7 +86,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V2.6",
+    Title = "Tuff Guys | Ink Game V3",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -102,7 +102,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V2.6",
+    Title = "Tuff Guys | Ink Game V3",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -132,8 +132,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V2.6",
-    Desc = "[+] Added Anti Void\n[+] Added Crack Immunity (Buggy)\n[~] Fixed RLGL GodMode\n[+] Added Guard Aimbot\n[+] Added Player Aimbot\n[~] Fixed Reveal Safe Glass\n[~] Fixed Auto Choke Mingle\n[+] Added Hider Kill Aura\n[~] Improved Bring Guards\n[+] Added Kill Aura (Bottle,Knife,Fork,Power Hold)\n[+] Added Bypass Anti Cheat\n[+] Added Help Injured Players RLGL\n[+] Added Tp End Glass Bridge\n[~] Improved Hunter Esp and Hider Esp\n[~] Moved Hide and Seek Esp's In Visual Tab",
+    Title = "Changelogs V3",
+    Desc = "[+] Added Jump Rope Tp Finish\n[-] Removed Help Injured Players\n[~] Fixed Kill Aura and Hider Kill Aura\n[+] Added Anti Ragdoll\n[-] Removed Lights Out Auto Kill\n[~] Fixed Auto Pull Rope\n[~] Fixed Player ESP\n[~] Fixed Hunter and Hider ESP\n[~] Fixed Crashing Sometimes",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -368,12 +368,6 @@ Main:Button({
         end
 
         PatchAnticheat()
-        WindUI:Notify({
-        Title = "Anti-Cheat",
-        Description = "AntiCheat bypass applied successfully",
-        Duration = 5,
-        Callback = function() end
-})
     end
 })
 
@@ -735,117 +729,29 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
-Main:Section({Title = "Lights Out"})
+-- Add Jump Rope section to Main tab
+Main:Section({Title = "Jump Rope"})
 Main:Divider()
 
-local autoKillEnabled = false
-local autoKillConnection
-local currentTarget = nil
-
-Main:Toggle({
-    Title = "Auto Kill",
-    Desc = "Automatically kills players",
-    Value = false,
-    Callback = function(state)
-        autoKillEnabled = state
-        if state then
-            -- Start auto kill
-            autoKillConnection = RunService.Heartbeat:Connect(function()
-                pcall(function()
-                    local player = Players.LocalPlayer
-                    local character = player.Character
-                    if not character then return end
-                    
-                    -- Check backpack for weapons
-                    local backpack = player:FindFirstChild("Backpack")
-                    local tool = nil
-                    
-                    if backpack then
-                        for _, item in ipairs(backpack:GetChildren()) do
-                            if item:IsA("Tool") then
-                                local itemName = item.Name:lower()
-                                if itemName:find("fork") or itemName:find("bottle") then
-                                    tool = item
-                                    break
-                                end
-                            end
-                        end
-                    end
-                    
-                    -- Equip tool if found
-                    if tool and not character:FindFirstChild(tool.Name) then
-                        tool.Parent = character
-                    end
-                    
-                    -- Find a target if none or current target is dead
-                    if not currentTarget or not currentTarget.Character or 
-                       (currentTarget.Character:FindFirstChildOfClass("Humanoid") and 
-                        currentTarget.Character:FindFirstChildOfClass("Humanoid").Health <= 0) then
-                        
-                        -- Find new target
-                        local closestDistance = math.huge
-                        for _, target in ipairs(Players:GetPlayers()) do
-                            if target ~= player and target.Character and 
-                               target.Character:FindFirstChild("HumanoidRootPart") and
-                               target.Character:FindFirstChildOfClass("Humanoid") and
-                               target.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
-                                
-                                local distance = (target.Character.HumanoidRootPart.Position - 
-                                                character.HumanoidRootPart.Position).Magnitude
-                                if distance < closestDistance then
-                                    closestDistance = distance
-                                    currentTarget = target
-                                end
-                            end
-                        end
-                    end
-                    
-                    -- Attack current target
-                    if currentTarget and currentTarget.Character and 
-                       currentTarget.Character:FindFirstChild("HumanoidRootPart") then
-                        
-                        -- Teleport to target
-                        character.HumanoidRootPart.CFrame = currentTarget.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 2)
-                        
-                        -- Simulate mouse click
-                        local VirtualInputManager = game:GetService("VirtualInputManager")
-                        local mousePos = Vector2.new(0, 0) -- Position doesn't matter for mouse click
-                        
-                        -- Mouse down
-                        VirtualInputManager:SendMouseButtonEvent(
-                            mousePos.X, 
-                            mousePos.Y, 
-                            0, -- Left mouse button
-                            true, -- Down
-                            game, 
-                            1 -- Click count
-                        )
-                        
-                        -- Small delay between down and up
-                        task.wait(0.05)
-                        
-                        -- Mouse up
-                        VirtualInputManager:SendMouseButtonEvent(
-                            mousePos.X, 
-                            mousePos.Y, 
-                            0, -- Left mouse button
-                            false, -- Up
-                            game, 
-                            1 -- Click count
-                        )
-                        
-                        -- Small delay between attacks
-                        task.wait(0.2)
-                    end
-                end)
-            end)
+Main:Button({
+    Title = "Complete Jump Rope",
+    Desc = "Teleports to finish",
+    Callback = function()
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            -- Convert position to CFrame (adding slight Y offset to prevent clipping)
+            local targetPosition = Vector3.new(
+                723.2041015625, 
+                197.14407348632812 + 3, -- +3 to Y to prevent ground clipping
+                922.08349609375
+            )
+            character:SetPrimaryPartCFrame(CFrame.new(targetPosition))
         else
-            -- Stop auto kill
-            if autoKillConnection then
-                autoKillConnection:Disconnect()
-                autoKillConnection = nil
-            end
-            currentTarget = nil
+            WindUI:Notify({
+                Title = "Error",
+                Description = "Character not found or missing HumanoidRootPart",
+                Duration = 5
+            })
         end
     end
 })
@@ -927,29 +833,11 @@ local function getKnife()
     return nil
 end
 
-local function attackHider(knife, hiderChar)
-    -- Auto-equip knife if needed
-    if knife.Parent ~= LocalPlayer.Character then
-        LocalPlayer.Character.Humanoid:EquipTool(knife)
-        task.wait(0.15) -- Slightly longer delay for knife equip
-    end
-    
-    -- Simulate M1 click
-    local VirtualInputManager = game:GetService("VirtualInputManager")
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-    task.wait(0.05)
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-    
-    -- Fire knife attack remote
-    local args = {"UsingMoveCustom", knife, nil, {Clicked = true}}
-    pcall(function()
-        game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args))
-    end)
-end
-
+-- Updated Hider Killaura with smooth tweening
 local function HiderKillaura(enabled)
     if enabled then
         hiderKillauraLoop = task.spawn(function()
+            local TweenService = game:GetService("TweenService")
             while task.wait(hiderAttackDelay) do
                 local knife = getKnife()
                 if not knife then
@@ -980,9 +868,28 @@ local function HiderKillaura(enabled)
                 if closestHider and closestHider.Character then
                     local targetRoot = closestHider.Character.HumanoidRootPart
                     
-                    -- Teleport behind hider
+                    -- Calculate position behind hider
                     local behindOffset = targetRoot.CFrame.LookVector * -3
-                    myRoot.CFrame = CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position)
+                    local targetCFrame = CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position)
+                    
+                    -- Smooth tween to target
+                    local tweenInfo = TweenInfo.new(
+                        0.2, -- Duration
+                        Enum.EasingStyle.Linear,
+                        Enum.EasingDirection.Out,
+                        0, -- Repeat count
+                        false, -- Reverses
+                        0 -- Delay
+                    )
+                    
+                    local tween = TweenService:Create(
+                        myRoot,
+                        tweenInfo,
+                        {CFrame = targetCFrame}
+                    )
+                    
+                    tween:Play()
+                    tween.Completed:Wait()
                     
                     -- Attack with knife
                     attackHider(knife, closestHider.Character)
@@ -997,9 +904,9 @@ local function HiderKillaura(enabled)
     end
 end
 
-Combat:Toggle({
+Main:Toggle({
     Title = "Hider Killaura",
-    Desc = "Teleports to Hiders and you need to manually click",
+    Desc = "Teleports to Hiders and auto attacks",
     Value = false,
     Callback = function(state)
         hiderKillauraEnabled = state
@@ -1019,32 +926,25 @@ Combat:Toggle({
 Main:Section({Title = "Tug of War"})
 Main:Divider()
 
+-- Optimized Tug of War Auto Pull Rope
 local autoPullEnabled = false
 local autoPullConnection
+local pullInterval = 0.1 -- Adjust speed here (lower = faster pulls)
 
 Main:Toggle({
     Title = "Auto Pull Rope",
-    Desc = "Automatically pulls the rope with perfect timing",
+    Desc = "Automatically pulls with perfect timing",
     Value = false,
     Callback = function(state)
         autoPullEnabled = state
         if state then
             autoPullConnection = RunService.Heartbeat:Connect(function()
-                pcall(function()
-                    local remote = game:GetService("ReplicatedStorage"):FindFirstChild("TemporaryReachedBindable")
-                    if not remote then return end
-
-                    local args = {
-                        {
-                            PerfectQTE = true,
-                            PerfectTiming = true,
-                            Reached = true
-                        }
+                local args = {
+                    {
+                        PerfectQTE = true
                     }
-                    
-                    -- Fire the remote with perfect parameters
-                    remote:FireServer(unpack(args))
-                end)
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable"):FireServer(unpack(args))
             end)
         else
             if autoPullConnection then
@@ -1386,6 +1286,7 @@ local function getEquippedWeapon()
     return nil
 end
 
+-- Updated Kill Aura function with smooth tweening
 local function attackTarget(weapon, target)
     -- Auto-equip if needed
     if weapon.Parent ~= LocalPlayer.Character then
@@ -1409,6 +1310,7 @@ end
 local function PlayerAttach(enabled)
     if enabled then
         killAuraLoop = task.spawn(function()
+            local TweenService = game:GetService("TweenService")
             while task.wait(attackDelay) do
                 local weapon = getEquippedWeapon()
                 if not weapon then
@@ -1439,9 +1341,28 @@ local function PlayerAttach(enabled)
                 if closestPlayer and closestPlayer.Character then
                     local targetRoot = closestPlayer.Character.HumanoidRootPart
                     
-                    -- Teleport behind target
+                    -- Calculate position behind target
                     local behindOffset = targetRoot.CFrame.LookVector * -3
-                    myRoot.CFrame = CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position)
+                    local targetCFrame = CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position)
+                    
+                    -- Smooth tween to target
+                    local tweenInfo = TweenInfo.new(
+                        0.2, -- Duration
+                        Enum.EasingStyle.Linear,
+                        Enum.EasingDirection.Out,
+                        0, -- Repeat count
+                        false, -- Reverses
+                        0 -- Delay
+                    )
+                    
+                    local tween = TweenService:Create(
+                        myRoot,
+                        tweenInfo,
+                        {CFrame = targetCFrame}
+                    )
+                    
+                    tween:Play()
+                    tween.Completed:Wait()
                     
                     -- Attack with equipped weapon
                     attackTarget(weapon, closestPlayer.Character)
@@ -1458,7 +1379,7 @@ end
 
 Combat:Toggle({
     Title = "Kill Aura",
-    Desc = "Knife/Bottle/Fork/Power Hold (Need to Manually Click)",
+    Desc = "Knife/Bottle/Fork/Power Hold and Auto Attacks",
     Value = false,
     Callback = function(state)
         killAuraEnabled = state
@@ -2534,7 +2455,7 @@ Misc:Toggle({
 Visual:Section({Title = "ESP"})
 Visual:Divider()
 
--- Fixed Player ESP
+-- Fixed Player ESP Function
 local playerESPEnabled = false
 local playerHighlights = {}
 local playerConnections = {}
@@ -2606,7 +2527,7 @@ end
 
 Visual:Toggle({
     Title = "ESP Players",
-    Desc = "Highlights all players",
+    Desc = "Highlights all players in the game",
     Value = false,
     Callback = function(state)
         playerESPEnabled = state
@@ -3174,13 +3095,3 @@ LocalPlayer.CharacterAdded:Connect(function(char)
         if toggle then toggle.Callback(true) end
     end
 end)
-
-if not hookmetamethod then
-    WindUI:Notify({
-    Title = "Error",
-    Description = "Your executor doesn't support hookmetamethod",
-    Duration = 10,
-    Callback = function() end
-})
-    return
-end
