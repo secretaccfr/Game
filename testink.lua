@@ -1376,29 +1376,29 @@ Main:Toggle({
 Main:Section({Title = "Tug of War"})
 Main:Divider()
 
--- Optimized Tug of War Auto Pull Rope
+
 local autoPullEnabled = false
 local autoPullConnection
-local pullInterval = 0.05 -- Adjust speed here (lower = faster pulls)
+local pullInterval = 0.001
 
 Main:Toggle({
     Title = "Auto Pull Rope",
-    Desc = "Automatically pulls with perfect timing",
+    Desc = "Pulls the rope automatically",
     Value = false,
     Callback = function(state)
         autoPullEnabled = state
         if state then
-            autoPullConnection = RunService.Heartbeat:Connect(function()
-                local args = {
-                    {
-                        PerfectQTE = true
-                    }
-                }
-                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable"):FireServer(unpack(args))
+            -- Use a fast loop with minimal delay
+            autoPullConnection = task.spawn(function()
+                while autoPullEnabled and task.wait(pullInterval) do
+                    -- Fire the remote as fast as possible
+                    local args = { { PerfectQTE = true } }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable"):FireServer(unpack(args))
+                end
             end)
         else
             if autoPullConnection then
-                autoPullConnection:Disconnect()
+                task.cancel(autoPullConnection)
                 autoPullConnection = nil
             end
         end
