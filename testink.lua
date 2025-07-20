@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V3.2 Executed",
+            ["title"] = "Ink Game V3.3 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -86,7 +86,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V3.2",
+    Title = "Tuff Guys | Ink Game V3.3",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -102,7 +102,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V3.2",
+    Title = "Tuff Guys | Ink Game V3.3",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -132,8 +132,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V3.2",
-    Desc = "[+] Added Emote's Play and Stop\n[~] Fixed Auto Perfect Jump Rope",
+    Title = "Changelogs V3.3",
+    Desc = "[+] Added Player Hitbox Expander (Combat Tab)",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -742,7 +742,7 @@ Main:Button({
         if character and character:FindFirstChild("HumanoidRootPart") then
             local targetPosition = Vector3.new(
                 723.2041015625, 
-                197.14407348632812 + 3, -- +3 to Y to prevent ground clipping
+                197.14407348632812 + 3,
                 922.08349609375
             )
             character:SetPrimaryPartCFrame(CFrame.new(targetPosition))
@@ -1505,6 +1505,206 @@ Combat:Toggle({
 
 -- Add this to the Combat tab section
 Combat:Section({Title = "Hitbox Expander"})
+Combat:Divider()
+
+-- Add this to the Combat tab section
+Combat:Section({Title = "Player"})
+Combat:Divider()
+
+-- Player Hitbox variables
+local playerHitboxEnabled = false
+local playerHitboxSize = 5 -- Default size multiplier
+local playerHitboxTransparency = 0.7
+local playerHitboxColor = Color3.fromRGB(255, 0, 255) -- Purple color for players
+local playerHitboxConnections = {}
+local playerHitboxParts = {}
+
+-- Function to create/update hitbox for a player
+local function updatePlayerHitbox(player)
+    if not player:IsA("Model") or player == LocalPlayer.Character then return end
+    local hrp = player:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    -- Clear existing hitbox if any
+    if playerHitboxParts[player] then
+        playerHitboxParts[player]:Destroy()
+        playerHitboxParts[player] = nil
+    end
+    
+    if not playerHitboxEnabled then return end
+    
+    -- Create a new invisible part that will act as the hitbox
+    local hitbox = Instance.new("Part")
+    hitbox.Name = "PlayerExpandedHitbox"
+    hitbox.Size = Vector3.new(playerHitboxSize, playerHitboxSize, playerHitboxSize)
+    hitbox.Transparency = playerHitboxTransparency
+    hitbox.Color = playerHitboxColor
+    hitbox.Material = Enum.Material.ForceField
+    hitbox.Anchored = false
+    hitbox.CanCollide = false
+    hitbox.CFrame = hrp.CFrame
+    
+    -- Weld to the player's HRP
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0 = hrp
+    weld.Part1 = hitbox
+    weld.Parent = hitbox
+    
+    hitbox.Parent = player
+    playerHitboxParts[player] = hitbox
+    
+    -- Make the original HRP invisible and non-collidable
+    hrp.Transparency = 1
+    hrp.CanCollide = false
+    
+    -- Cleanup when player is removed
+    playerHitboxConnections[player] = player.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            if playerHitboxParts[player] then
+                playerHitboxParts[player]:Destroy()
+                playerHitboxParts[player] = nil
+            end
+            if playerHitboxConnections[player] then
+                playerHitboxConnections[player]:Disconnect()
+                playerHitboxConnections[player] = nil
+            end
+            -- Restore original HRP properties if player still exists
+            if player.Parent then
+                if hrp then
+                    hrp.Transparency = 0
+                    hrp.CanCollide = true
+                end
+            end
+        end
+    end)
+end
+
+-- Function to setup hitboxes for all players
+local function setupPlayerHitboxes()
+    -- Clear existing hitboxes
+    for player, hitbox in pairs(playerHitboxParts) do
+        if hitbox and hitbox.Parent then
+            hitbox:Destroy()
+        end
+        -- Restore original HRP properties
+        if player and player.Parent then
+            local hrp = player:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.Transparency = 0
+                hrp.CanCollide = true
+            end
+        end
+    end
+    table.clear(playerHitboxParts)
+    
+    for player, conn in pairs(playerHitboxConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(playerHitboxConnections)
+
+    if not playerHitboxEnabled then return end
+    
+    -- Find all existing players
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            updatePlayerHitbox(player.Character)
+        end
+    end
+    
+    -- Listen for new players and their characters
+    playerHitboxConnections.playerAdded = Players.PlayerAdded:Connect(function(player)
+        player.CharacterAdded:Connect(function(character)
+            updatePlayerHitbox(character)
+        end)
+    end)
+    
+    -- Also track existing players' character changes
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            playerHitboxConnections[player] = player.CharacterAdded:Connect(function(character)
+                updatePlayerHitbox(character)
+            end)
+        end
+    end
+end
+
+-- Main toggle for player hitboxes
+Combat:Toggle({
+    Title = "Player Hitbox Expander",
+    Desc = "Makes players easier to hit by expanding their hitbox",
+    Value = false,
+    Callback = function(state)
+        playerHitboxEnabled = state
+        setupPlayerHitboxes()
+    end
+})
+
+Combat:Slider({
+    Title = "Player Hitbox Size",
+    Value = {
+        Min = 1,
+        Max = 20,
+        Default = 5,
+    },
+    Callback = function(value)
+        playerHitboxSize = value
+        if playerHitboxEnabled then
+            for player, hitbox in pairs(playerHitboxParts) do
+                if hitbox and hitbox.Parent then
+                    hitbox.Size = Vector3.new(playerHitboxSize, playerHitboxSize, playerHitboxSize)
+                end
+            end
+        end
+    end
+})
+
+Combat:Slider({
+    Title = "Player Hitbox Transparency",
+    Value = {
+        Min = 0,
+        Max = 1,
+        Default = 0.7,
+    },
+    Callback = function(value)
+        playerHitboxTransparency = value
+        if playerHitboxEnabled then
+            for player, hitbox in pairs(playerHitboxParts) do
+                if hitbox and hitbox.Parent then
+                    hitbox.Transparency = playerHitboxTransparency
+                end
+            end
+        end
+    end
+})
+
+-- Color picker for player hitboxes
+Combat:Colorpicker({
+    Title = "Player Hitbox Color",
+    Default = Color3.fromRGB(255, 0, 255), -- Purple
+    Callback = function(color)
+        playerHitboxColor = color
+        if playerHitboxEnabled then
+            -- Update all existing hitboxes
+            for player, hitbox in pairs(playerHitboxParts) do
+                if hitbox and hitbox.Parent then
+                    hitbox.Color = playerHitboxColor
+                end
+            end
+        end
+    end
+})
+
+-- Auto-update when character respawns
+game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function()
+    if playerHitboxEnabled then
+        task.wait(1) -- Wait for character to load
+        setupPlayerHitboxes()
+    end
+end)
+
+Combat:Section({Title = "Guard"})
 Combat:Divider()
 
 -- Hitbox variables
