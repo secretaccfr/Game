@@ -86,7 +86,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V3.4",
+    Title = "Tuff Guys | Ink Game V3.5",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -102,7 +102,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V3.4",
+    Title = "Tuff Guys | Ink Game V3.5",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -132,8 +132,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V3.4",
-    Desc = "[+] Added Help injured and Bring injured to start\n[+] Added Dont fall on wrong glass",
+    Title = "Changelogs V3.5",
+    Desc = "[+] Added Anti Fall\n[~] Fixed Auto Perfect Jump\n[~] Improved Bypass Anti Cheat\n[~] Fixed Auto Pull Rope",
     Image = "rbxassetid://130506306640152",
 })
 
