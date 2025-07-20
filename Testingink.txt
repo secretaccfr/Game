@@ -507,138 +507,109 @@ Main:Toggle({
     end
 })
 
--- Add this to the Red Light Green Light section in the Main tab
+local function firePromptInstantly(prompt)
+    if prompt:IsA("ProximityPrompt") then
+        local oldHoldDuration = prompt.HoldDuration
+        prompt.HoldDuration = 0  -- Set hold time to zero
+        fireproximityprompt(prompt)
+        prompt.HoldDuration = oldHoldDuration  -- Restore original value
+    end
+end
+
+-- Add this to the Red Light Green Light section in Main tab
 Main:Toggle({
     Title = "Help Injured",
-    Desc = "Automatically helps downed players in RLGL",
+    Desc = "Auto-rescues downed players INSIDE danger zone",
     Value = false,
     Callback = function(state)
         if state then
-            -- Create a table to track recently helped players
-            getgenv().recentlyHelpedPlayers = {}
-            local HELP_COOLDOWN = 30 -- seconds before helping same player again
-            local DOLL_SAFE_DISTANCE = 10 -- studs
-            local FINISH_POSITION = CFrame.new(-46, 1024, 110) -- Same as Complete RLGL button
+            -- Config
+            local FINISH_CFRAME = CFrame.new(-46, 1024, 110)
+            local HELP_COOLDOWN = 30
+            local recentlyHelped = {}
+            
+            -- Danger zone polygon (XZ coordinates)
+            local DANGER_ZONE = {
+                Vector2.new(-52, -515),
+                Vector2.new(115, -515), 
+                Vector2.new(115, 84),
+                Vector2.new(-216, 84)
+            }
 
-            -- Function to find an injured player
-            local function FindInjuredPlayer()
-                -- Get Red Light doll position if exists
-                local doll = workspace:FindFirstChild("RedLightGreenLight") and workspace.RedLightGreenLight:FindFirstChild("doll")
-                local dollPosition = doll and doll:GetPivot().Position
-
-                for _, plr in pairs(Players:GetPlayers()) do
-                    -- Skip conditions
-                    if plr == LocalPlayer then continue end
-                    if not plr.Character then continue end
-                    if not plr.Character:FindFirstChild("HumanoidRootPart") then continue end
-                    if plr:GetAttribute("IsDead") then continue end
-                    if plr.Character:GetAttribute("SafeRedLightGreenLight") then continue end -- Already safe
-                    if plr.Character:FindFirstChild("IsBeingHeld") then continue end
-                    if getgenv().recentlyHelpedPlayers[plr.UserId] then continue end -- Recently helped
-
-                    -- Check doll proximity
-                    if dollPosition then
-                        local distanceToDoll = (plr.Character.HumanoidRootPart.Position - dollPosition).Magnitude
-                        if distanceToDoll < DOLL_SAFE_DISTANCE then
-                            continue -- Too close to doll
-                        end
+            -- Point-in-polygon check (returns true if INSIDE danger zone)
+            local function isInDangerZone(position)
+                local point = Vector2.new(position.X, position.Z)
+                local inside = false
+                local j = #DANGER_ZONE
+                for i = 1, #DANGER_ZONE do
+                    local vi, vj = DANGER_ZONE[i], DANGER_ZONE[j]
+                    if ((vi.Y > point.Y) ~= (vj.Y > point.Y)) and
+                       (point.X < (vj.X-vi.X)*(point.Y-vi.Y)/(vj.Y-vi.Y)+vi.X) then
+                        inside = not inside
                     end
-
-                    -- Check for carry prompt
-                    local CarryPrompt = plr.Character.HumanoidRootPart:FindFirstChild("CarryPrompt")
-                    if CarryPrompt then
-                        return plr, CarryPrompt
-                    end
+                    j = i
                 end
-                return nil
+                return inside
             end
 
-            -- Main helper function
-            local function HelpInjuredPlayer()
-                local injuredPlayer, carryPrompt = FindInjuredPlayer()
-                if not injuredPlayer then
-                    return false
-                end
-
-                -- Store helped player
-                getgenv().recentlyHelpedPlayers[injuredPlayer.UserId] = os.time()
-                
-                -- Temporarily disable AntiFling if enabled
-                local wasAntiFlingEnabled = false
-                if antiFlingConnection then
-                    wasAntiFlingEnabled = true
-                    antiFlingConnection:Disconnect()
-                    antiFlingConnection = nil
-                end
-
-                -- Execute help sequence
-                local success = true
-                pcall(function()
+            -- Main rescue function
+            local function rescuePlayer()
+                for _, player in ipairs(Players:GetPlayers()) do
+                    -- Skip invalid targets
+                    if player == LocalPlayer then continue end
+                    if not player.Character then continue end
+                    if player:GetAttribute("IsDead") then continue end
+                    if player.Character:GetAttribute("SafeRedLightGreenLight") then continue end
+                    if recentlyHelped[player.UserId] then continue end
+                    
+                    -- Check carry prompt and position
+                    local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+                    local prompt = hrp and hrp:FindFirstChild("CarryPrompt")
+                    if not prompt or not isInDangerZone(hrp.Position) then continue end
+                    
+                    -- Rescue sequence
+                    recentlyHelped[player.UserId] = os.time()
+                    
                     -- Teleport to player
-                    LocalPlayer.Character:PivotTo(injuredPlayer.Character:GetPrimaryPartCFrame())
+                    LocalPlayer.Character:PivotTo(hrp.CFrame)
                     task.wait(0.2)
                     
-                    -- Pick them up
-                    fireproximityprompt(carryPrompt)
+                    -- Pick up player
+                    firePromptInstantly(prompt)
                     task.wait(0.5)
                     
-                    -- Teleport to finish line (same as Complete RLGL button)
-                    LocalPlayer.Character:PivotTo(FINISH_POSITION)
+                    -- Bring to finish line
+                    LocalPlayer.Character:PivotTo(FINISH_CFRAME)
                     task.wait(0.5)
                     
                     -- Release player
                     game:GetService("ReplicatedStorage").Remotes.ClickedButton:FireServer({tryingtoleave = true})
-                end)
-
-                -- Restore AntiFling if it was enabled
-                if wasAntiFlingEnabled then
-                    antiFlingConnection = RunService.Heartbeat:Connect(function()
-                        pcall(function()
-                            local character = LocalPlayer.Character
-                            if character then
-                                local hrp = character:FindFirstChild("HumanoidRootPart")
-                                local humanoid = character:FindFirstChildOfClass("Humanoid")
-                                
-                                if hrp and humanoid then
-                                    local currentVel = hrp.Velocity
-                                    hrp.Velocity = Vector3.new(currentVel.X * 0.5, currentVel.Y, currentVel.Z * 0.5)
-                                    hrp.RotVelocity = Vector3.new(0, 0, 0)
-                                end
-                            end
-                        end)
-                    end)
                 end
-
-                return success
             end
 
-            -- Cleanup old entries periodically
+            -- Cooldown cleaner
             task.spawn(function()
-                while task.wait(10) and getgenv().helpInjuredEnabled do
-                    local currentTime = os.time()
-                    for userId, helpTime in pairs(getgenv().recentlyHelpedPlayers) do
-                        if currentTime - helpTime > HELP_COOLDOWN then
-                            getgenv().recentlyHelpedPlayers[userId] = nil
+                while task.wait(10) and getgenv().HelpInjuredRunning do
+                    local now = os.time()
+                    for userId, time in pairs(recentlyHelped) do
+                        if now - time > HELP_COOLDOWN then
+                            recentlyHelped[userId] = nil
                         end
                     end
                 end
             end)
 
-            -- Create the main loop
-            getgenv().helpInjuredEnabled = true
-            getgenv().helpInjuredLoop = task.spawn(function()
-                while task.wait(1) and getgenv().helpInjuredEnabled do
-                    HelpInjuredPlayer()
+            -- Main loop
+            getgenv().HelpInjuredRunning = true
+            task.spawn(function()
+                while task.wait(1) and getgenv().HelpInjuredRunning do
+                    pcall(rescuePlayer)
                 end
             end)
         else
-            -- Clean up
-            getgenv().helpInjuredEnabled = false
-            if getgenv().helpInjuredLoop then
-                task.cancel(getgenv().helpInjuredLoop)
-                getgenv().helpInjuredLoop = nil
-            end
-            getgenv().recentlyHelpedPlayers = nil
+            -- Cleanup
+            getgenv().HelpInjuredRunning = false
+            recentlyHelped = nil
         end
     end
 })
