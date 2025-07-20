@@ -518,6 +518,7 @@ Main:Toggle({
             getgenv().recentlyHelpedPlayers = {}
             local HELP_COOLDOWN = 30 -- seconds before helping same player again
             local DOLL_SAFE_DISTANCE = 10 -- studs
+            local FINISH_POSITION = CFrame.new(-46, 1024, 110) -- Same as Complete RLGL button
 
             -- Function to find an injured player
             local function FindInjuredPlayer()
@@ -581,11 +582,8 @@ Main:Toggle({
                     fireproximityprompt(carryPrompt)
                     task.wait(0.5)
                     
-                    -- Teleport to finish line
-                    local finish = workspace:FindFirstChild("RedLightGreenLightFinish")
-                    if finish then
-                        LocalPlayer.Character:PivotTo(finish:GetPivot())
-                    end
+                    -- Teleport to finish line (same as Complete RLGL button)
+                    LocalPlayer.Character:PivotTo(FINISH_POSITION)
                     task.wait(0.5)
                     
                     -- Release player
