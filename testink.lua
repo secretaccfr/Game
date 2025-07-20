@@ -908,48 +908,109 @@ Main:Toggle({
     end
 })
 
-local killHidersEnabled = false
-local killHidersConnection
+local hiderKillauraEnabled = false
+local hiderKillauraLoop = nil
+local hiderAttackDelay = 0.3 -- Slightly slower than normal killaura
 
-local function KillHiders()
-    while killHidersEnabled do
-        task.wait(0.25) -- Slight delay between checks
-        
-        local hider = nil
-        -- Find nearest alive hider using IsHider attribute
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player:GetAttribute("IsHider") and 
-               player.Character and player.Character:FindFirstChild("Humanoid") and 
-               player.Character.Humanoid.Health > 0 then
-                hider = player
-                break
-            end
-        end
+local function getKnife()
+    -- Check character first
+    local knife = LocalPlayer.Character:FindFirstChild("Knife")
+    if knife then return knife end
+    
+    -- Check backpack
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if backpack then
+        knife = backpack:FindFirstChild("Knife")
+        if knife then return knife end
+    end
+    
+    return nil
+end
 
-        if hider and hider.Character and hider.Character:FindFirstChild("HumanoidRootPart") then
-            -- Teleport to hider
-            LocalPlayer.Character:PivotTo(hider.Character:GetPrimaryPartCFrame())
-            task.wait(0.2)
-            
-            -- Fire knife remote to kill
-            local knife = LocalPlayer.Character:FindFirstChild("Knife") or LocalPlayer.Backpack:FindFirstChild("Knife")
-            if knife then
-                LocalPlayer.Character.Humanoid:EquipTool(knife)
-                local args = { "UsingMoveCustom", knife, nil, { Clicked = true } }
-                game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args))
+local function attackHider(knife, hiderChar)
+    -- Auto-equip knife if needed
+    if knife.Parent ~= LocalPlayer.Character then
+        LocalPlayer.Character.Humanoid:EquipTool(knife)
+        task.wait(0.15) -- Slightly longer delay for knife equip
+    end
+    
+    -- Simulate M1 click
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+    task.wait(0.05)
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+    
+    -- Fire knife attack remote
+    local args = {"UsingMoveCustom", knife, nil, {Clicked = true}}
+    pcall(function()
+        game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args))
+    end)
+end
+
+local function HiderKillaura(enabled)
+    if enabled then
+        hiderKillauraLoop = task.spawn(function()
+            while task.wait(hiderAttackDelay) do
+                local knife = getKnife()
+                if not knife then
+                    warn("[Hider Killaura] No knife equipped!")
+                    continue
+                end
+                
+                -- Find closest living hider
+                local closestHider, closestDistance = nil, math.huge
+                local myRoot = LocalPlayer.Character.HumanoidRootPart
+                
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer and player:GetAttribute("IsHider") and player.Character then
+                        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                        local targetRoot = player.Character:FindFirstChild("HumanoidRootPart")
+                        
+                        if humanoid and humanoid.Health > 0 and targetRoot then
+                            local distance = (targetRoot.Position - myRoot.Position).Magnitude
+                            if distance < closestDistance then
+                                closestHider = player
+                                closestDistance = distance
+                            end
+                        end
+                    end
+                end
+                
+                -- Attack if valid hider found
+                if closestHider and closestHider.Character then
+                    local targetRoot = closestHider.Character.HumanoidRootPart
+                    
+                    -- Teleport behind hider
+                    local behindOffset = targetRoot.CFrame.LookVector * -3
+                    myRoot.CFrame = CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position)
+                    
+                    -- Attack with knife
+                    attackHider(knife, closestHider.Character)
+                end
             end
+        end)
+    else
+        if hiderKillauraLoop then
+            task.cancel(hiderKillauraLoop)
+            hiderKillauraLoop = nil
         end
     end
 end
 
-Main:Toggle({
+Combat:Toggle({
     Title = "Hider Killaura",
-    Desc = "Automatically kills nearby hiders when you're a hunter",
+    Desc = "Teleports to Hiders and you need to manually click",
     Value = false,
     Callback = function(state)
-        killHidersEnabled = state
+        hiderKillauraEnabled = state
+        HiderKillaura(state)
+        
+        -- Reconnect on respawn
         if state then
-            coroutine.wrap(KillHiders)()
+            LocalPlayer.CharacterAdded:Connect(function()
+                task.wait(1) -- Wait for character to load
+                if hiderKillauraEnabled then HiderKillaura(true) end
+            end)
         end
     end
 })
@@ -1302,79 +1363,113 @@ Combat:Toggle({
 })
 
 local killAuraEnabled = false
-local killAuraConnection
-local validWeapons = {"Fork", "Bottle", "Knife", "Power Hold"}
+local killAuraLoop = nil
+local attackDelay = 0.2
+local supportedWeapons = {"Knife", "Bottle", "Fork", "Power Hold"} -- Add more as needed
 
-local function GetWeapon()
-    local char = LocalPlayer.Character
-    if not char then return end
-    
-    for _, weaponName in pairs(validWeapons) do
-        local weapon = char:FindFirstChild(weaponName) or LocalPlayer.Backpack:FindFirstChild(weaponName)
+local function getEquippedWeapon()
+    -- Check character first
+    for _, weaponName in pairs(supportedWeapons) do
+        local weapon = LocalPlayer.Character:FindFirstChild(weaponName)
         if weapon then return weapon end
     end
-end
-
-local function GetNearestEnemy(maxDist)
-    local closest, dist = nil, maxDist or 15
-    local lroot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not lroot then return end
-
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
-            local root = player.Character:FindFirstChild("HumanoidRootPart")
-            local hum = player.Character:FindFirstChild("Humanoid")
-            if root and hum and hum.Health > 0 then
-                local distance = (root.Position - lroot.Position).Magnitude
-                if distance < dist then
-                    closest = player.Character
-                    dist = distance
-                end
-            end
+    
+    -- Check backpack if not equipped
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if backpack then
+        for _, weaponName in pairs(supportedWeapons) do
+            local weapon = backpack:FindFirstChild(weaponName)
+            if weapon then return weapon end
         end
     end
-    return closest
+    
+    return nil
 end
 
-local function ExecuteKillaura()
-    local weapon = GetWeapon()
-    local target = GetNearestEnemy(15)
-    if not weapon or not target then return end
-
-    -- Equip weapon if needed
+local function attackTarget(weapon, target)
+    -- Auto-equip if needed
     if weapon.Parent ~= LocalPlayer.Character then
         LocalPlayer.Character.Humanoid:EquipTool(weapon)
-        task.wait(0.1)
+        task.wait(0.1) -- Small delay for equip animation
     end
-
-    -- Teleport close to target
-    local targetPos = target:GetPrimaryPartCFrame()
-    LocalPlayer.Character:PivotTo(targetPos * CFrame.new(0, 0, -2))
-
+    
+    -- Simulate M1 click
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+    task.wait(0.05)
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+    
     -- Fire attack remote
     local args = {"UsingMoveCustom", weapon, nil, {Clicked = true}}
-    game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args))
-    
-    -- Fire confirmation remote
-    local args2 = {"UsingMoveCustom", weapon, true, {Clicked = true}}
-    game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args2))
+    pcall(function()
+        game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args))
+    end)
+end
+
+local function PlayerAttach(enabled)
+    if enabled then
+        killAuraLoop = task.spawn(function()
+            while task.wait(attackDelay) do
+                local weapon = getEquippedWeapon()
+                if not weapon then
+                    warn("[Kill Aura] No supported weapon equipped!")
+                    continue
+                end
+                
+                -- Find closest living player
+                local closestPlayer, closestDistance = nil, math.huge
+                local myRoot = LocalPlayer.Character.HumanoidRootPart
+                
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer and player.Character then
+                        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                        local targetRoot = player.Character:FindFirstChild("HumanoidRootPart")
+                        
+                        if humanoid and humanoid.Health > 0 and targetRoot then
+                            local distance = (targetRoot.Position - myRoot.Position).Magnitude
+                            if distance < closestDistance then
+                                closestPlayer = player
+                                closestDistance = distance
+                            end
+                        end
+                    end
+                end
+                
+                -- Attack if valid target
+                if closestPlayer and closestPlayer.Character then
+                    local targetRoot = closestPlayer.Character.HumanoidRootPart
+                    
+                    -- Teleport behind target
+                    local behindOffset = targetRoot.CFrame.LookVector * -3
+                    myRoot.CFrame = CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position)
+                    
+                    -- Attack with equipped weapon
+                    attackTarget(weapon, closestPlayer.Character)
+                end
+            end
+        end)
+    else
+        if killAuraLoop then
+            task.cancel(killAuraLoop)
+            killAuraLoop = nil
+        end
+    end
 end
 
 Combat:Toggle({
     Title = "Kill Aura",
-    Desc = "Automatically attacks nearby enemies (supports Bottle,Fork,Knife,Power Hold)",
+    Desc = "Knife/Bottle/Fork/Power Hold (Need to Manually Click)",
     Value = false,
     Callback = function(state)
         killAuraEnabled = state
+        PlayerAttach(state)
+        
+        -- Reconnect on respawn
         if state then
-            killAuraConnection = RunService.Heartbeat:Connect(function()
-                pcall(ExecuteKillaura)
+            LocalPlayer.CharacterAdded:Connect(function()
+                task.wait(1)
+                if killAuraEnabled then PlayerAttach(true) end
             end)
-        else
-            if killAuraConnection then
-                killAuraConnection:Disconnect()
-                killAuraConnection = nil
-            end
         end
     end
 })
@@ -2214,6 +2309,97 @@ Misc:Toggle({
                 stunConnection:Disconnect()
                 stunConnection = nil
             end
+        end
+    end
+})
+
+-- Anti Ragdoll Toggle
+local antiRagdollEnabled = false
+local antiRagdollConnections = {}
+
+local function BypassRagdoll()
+    local character = LocalPlayer.Character
+    if not character then return end
+
+    -- Remove existing ragdolls/stuns
+    for _, child in ipairs(character:GetChildren()) do
+        if child.Name == "Ragdoll" then
+            child:Destroy()
+        elseif table.find({"Stun", "RotateDisabled", "RagdollWakeupImmunity", "InjuredWalking"}, child.Name) then
+            child:Destroy()
+        end
+    end
+
+    -- Prevent new ragdolls
+    if antiRagdollConnections[character] then
+        antiRagdollConnections[character]:Disconnect()
+    end
+    
+    antiRagdollConnections[character] = character.ChildAdded:Connect(function(child)
+        if child.Name == "Ragdoll" then
+            task.spawn(function()
+                child:Destroy()
+                local humanoid = character:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    humanoid.PlatformStand = false
+                    humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+                end
+            end)
+        elseif table.find({"Stun", "RotateDisabled"}, child.Name) then
+            task.spawn(function() child:Destroy() end)
+        end
+    end)
+
+    -- Fix joints and constraints
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if humanoidRootPart then
+        for _, obj in ipairs(humanoidRootPart:GetChildren()) do
+            if obj:IsA("BallSocketConstraint") or obj.Name:match("^CacheAttachment") then
+                obj:Destroy()
+            end
+        end
+    end
+
+    -- Repair motor6D joints
+    local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+    if torso then
+        for _, jointName in ipairs({"Left Hip", "Left Shoulder", "Neck", "Right Hip", "Right Shoulder"}) do
+            local motor = torso:FindFirstChild(jointName)
+            if motor and motor:IsA("Motor6D") and not motor.Part0 then
+                motor.Part0 = torso
+            end
+        end
+    end
+
+    -- Remove bone constraints
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part:FindFirstChild("BoneCustom") then
+            part.BoneCustom:Destroy()
+        end
+    end
+end
+
+Misc:Toggle({
+    Title = "Anti Ragdoll",
+    Desc = "Prevents ragdoll effects and stuns",
+    Value = false,
+    Callback = function(state)
+        antiRagdollEnabled = state
+        if state then
+            -- Apply immediately
+            BypassRagdoll()
+            
+            -- Reapply when character respawns
+            antiRagdollConnections.charAdded = LocalPlayer.CharacterAdded:Connect(function(character)
+                task.wait(0.5) -- Wait for character to fully load
+                BypassRagdoll()
+            end)
+        else
+            -- Clean up connections
+            for _, conn in pairs(antiRagdollConnections) do
+                if conn then conn:Disconnect() end
+            end
+            antiRagdollConnections = {}
         end
     end
 })
