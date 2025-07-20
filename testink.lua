@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V3.1 Executed",
+            ["title"] = "Ink Game V3.2 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -86,7 +86,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V3.1",
+    Title = "Tuff Guys | Ink Game V3.2",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -102,7 +102,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V3.1",
+    Title = "Tuff Guys | Ink Game V3.2",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -132,8 +132,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V3.1",
-    Desc = "[+] Added Jump Rope Auto Perfect Jump (Not Tested Yet Prob Some Bugs)\n[~] Improved Hider and Hunter ESP\n[~] Improved Kill Aura and Hider Kill Aura\n[~] Renamed Jump Power to Jump Boost\n[~] Fixed Jump Boost\n[+] Added Speed Boost (Misc Tab)",
+    Title = "Changelogs V3.2",
+    Desc = "[+] Added Emote's Play and Stop\n[~] Fixed Auto Perfect Jump Rope",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -781,7 +781,7 @@ Main:Toggle({
                     
                     -- Jump timing logic
                     local currentTime = tick()
-                    if not getgenv().lastJumpTime or (currentTime - getgenv().lastJumpTime) >= 2.5 then
+                    if not getgenv().lastJumpTime or (currentTime - getgenv().lastJumpTime) >= 2.8 then
                         local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
                         if humanoid then
                             humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
@@ -1696,6 +1696,128 @@ game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function()
 end)
 
 -- Utility Tab
+-- Add this to the Utility tab section
+Utility:Section({Title = "Emotes"})
+Utility:Divider()
+
+-- Initialize emote variables
+local emoteList = {}
+local currentEmoteTrack = nil
+local selectedEmote = nil -- Track the selected emote
+
+-- Function to load emotes
+local function loadEmotes()
+    table.clear(emoteList)
+    
+    local Animations = ReplicatedStorage:WaitForChild("Animations", 10)
+    if not Animations then return end
+    
+    local Emotes = Animations:WaitForChild("Emotes", 10)
+    if not Emotes then return end
+
+    for _, anim in pairs(Emotes:GetChildren()) do
+        if anim:IsA("Animation") and anim.AnimationId ~= "" then
+            emoteList[anim.Name] = anim.AnimationId
+        end
+    end
+end
+
+-- Function to play emote
+local function playEmote(emoteName)
+    -- Get character and humanoid
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    -- Stop current emote if playing
+    if currentEmoteTrack then
+        currentEmoteTrack:Stop()
+        currentEmoteTrack = nil
+    end
+
+    -- Load emote animation
+    local animId = emoteList[emoteName]
+    if not animId then return end
+
+    local anim = Instance.new("Animation")
+    anim.AnimationId = animId
+
+    -- Play animation
+    local track = humanoid:LoadAnimation(anim)
+    track.Priority = Enum.AnimationPriority.Action
+    track:Play()
+    
+    -- Store reference
+    currentEmoteTrack = track
+end
+
+-- Function to stop emote
+local function stopEmote()
+    if currentEmoteTrack then
+        currentEmoteTrack:Stop()
+        currentEmoteTrack = nil
+    end
+end
+
+-- Create dropdown for emotes
+local emoteDropdown = Utility:Dropdown({
+    Title = "Emotes",
+    Values = {}, -- Will be populated after loading
+    Callback = function(selected)
+        selectedEmote = selected -- Store the selected emote
+    end
+})
+
+-- Create play and stop buttons
+Utility:Button({
+    Title = "Play Emote",
+    Callback = function()
+        if selectedEmote then
+            playEmote(selectedEmote)
+        end
+    end
+})
+
+Utility:Button({
+    Title = "Stop Emote",
+    Callback = stopEmote
+})
+
+-- Initialize emotes on game load
+task.spawn(function()
+    loadEmotes()
+    
+    -- Update dropdown with loaded emotes
+    local emoteNames = {}
+    for name, _ in pairs(emoteList) do
+        table.insert(emoteNames, name)
+    end
+    table.sort(emoteNames)
+    emoteDropdown:Refresh(emoteNames, true)
+    
+    -- Update when new emotes are added
+    local Animations = ReplicatedStorage:WaitForChild("Animations", 10)
+    if Animations then
+        local Emotes = Animations:WaitForChild("Emotes", 10)
+        if Emotes then
+            Emotes.ChildAdded:Connect(function()
+                task.wait()
+                loadEmotes()
+                
+                -- Update dropdown again
+                local newEmoteNames = {}
+                for name, _ in pairs(emoteList) do
+                    table.insert(newEmoteNames, name)
+                end
+                table.sort(newEmoteNames)
+                emoteDropdown:Refresh(newEmoteNames, true)
+            end)
+        end
+    end
+end)
+
 Utility:Section({Title = "Power"})
 Utility:Divider()
 -- Phantom Step Button
