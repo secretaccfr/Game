@@ -1764,7 +1764,7 @@ end
 -- Create dropdown for emotes
 local emoteDropdown = Utility:Dropdown({
     Title = "Emotes",
-    List = {}, -- Will be populated after loading
+    Values = {}, -- Will be populated after loading
     Callback = function(selected)
         selectedEmote = selected -- Store the selected emote
     end
