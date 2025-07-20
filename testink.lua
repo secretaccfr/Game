@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V3.4 Executed",
+            ["title"] = "Ink Game V3.5 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -282,6 +282,193 @@ local function fling()
     end
 end
 
+-- Add these functions before the Window creation
+
+function AutoPerfectJumpRope()
+    local RunService = game:GetService("RunService")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    
+    local connection
+    local function updateIndicator()
+        local character = LocalPlayer.Character
+        if not character then return end
+        
+        for _, child in ipairs(character:GetDescendants()) do
+            if child:IsA("NumberValue") and string.find(child.Name:lower(), "indicator") then
+                child.Value = 0  -- Sets jump timing to perfect
+                return
+            end
+        end
+    end
+
+    connection = RunService.Heartbeat:Connect(updateIndicator)
+    
+    -- Cleanup function
+    return function()
+        if connection then
+            connection:Disconnect()
+            connection = nil
+        end
+    end
+end
+
+function AntiFallJumpRope()
+    local RunService = game:GetService("RunService")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local Workspace = game:GetService("Workspace")
+    
+    -- Destroy fall detection parts
+    local function destroyFallParts()
+        local jumpRope = Workspace:FindFirstChild("JumpRope")
+        if not jumpRope then return end
+        
+        for _, partName in ipairs({"FallColllisionYClient", "FallColllisionY", "COLLISIONCHECK"}) do
+            local part = jumpRope:FindFirstChild(partName)
+            if part then
+                part:Destroy()
+            end
+        end
+    end
+
+    -- Anti-fall protection
+    local connection
+    local function preventFalling()
+        local character = LocalPlayer.Character
+        if not character then return end
+        
+        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+        if not humanoidRootPart then return end
+        
+        -- Adjust Y threshold based on the game's map
+        if humanoidRootPart.Position.Y < 100 then
+            humanoidRootPart.CFrame = CFrame.new(humanoidRootPart.Position.X, 150, humanoidRootPart.Position.Z)
+            humanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+        end
+    end
+
+    destroyFallParts()
+    connection = RunService.Heartbeat:Connect(preventFalling)
+    
+    -- Cleanup function
+    return function()
+        if connection then
+            connection:Disconnect()
+            connection = nil
+        end
+    end
+end
+
+function AntiCheatPatch()
+    if not hookmetamethod then
+        warn("Your executor doesn't support hookmetamethod!")
+        return function() end
+    end
+
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local RunService = game:GetService("RunService")
+    
+    -- Store original functions
+    local originalIndex = hookmetamethod(game, "__index", function() end)
+    local originalNewIndex = hookmetamethod(game, "__newindex", function() end)
+    local originalNamecall = hookmetamethod(game, "__namecall", function() end)
+    
+    -- Velocity spoofing
+    local spoofedVelocity = Vector3.new(0, 0, 0)
+    local function newIndex(self, key, value)
+        if not checkcaller() and self:IsA("BasePart") and (key == "Velocity" or key == "AssemblyLinearVelocity") then
+            return
+        end
+        return originalNewIndex(self, key, value)
+    end
+
+    -- Remote blocking
+    local function namecall(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        
+        if method == "FireServer" then
+            local remoteName = tostring(self)
+            
+            -- Block fall detection remotes
+            if remoteName == "TemporaryReachedBindable" then
+                if args[1] and type(args[1]) == "table" and (args[1].FallingPlayer or args[1].funnydeath) then
+                    return nil
+                end
+            elseif remoteName == "RandomOtherRemotes" then
+                if args[1] and type(args[1]) == "table" and args[1].FallenOffMap then
+                    return nil
+                end
+            end
+        end
+        
+        return originalNamecall(self, ...)
+    end
+
+    -- Prevent anchoring
+    local anchorConnection
+    local function onCharacterAdded(character)
+        local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 2)
+        if humanoidRootPart then
+            if anchorConnection then
+                anchorConnection:Disconnect()
+            end
+            anchorConnection = humanoidRootPart:GetPropertyChangedSignal("Anchored"):Connect(function()
+                if humanoidRootPart.Anchored then
+                    humanoidRootPart.Anchored = false
+                end
+            end)
+        end
+    end
+
+    -- Apply hooks
+    hookmetamethod(game, "__newindex", newIndex)
+    hookmetamethod(game, "__namecall", namecall)
+    
+    -- Setup character monitoring
+    if LocalPlayer.Character then
+        onCharacterAdded(LocalPlayer.Character)
+    end
+    local charAddedConn = LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+    
+    -- Cleanup function
+    return function()
+        hookmetamethod(game, "__newindex", originalNewIndex)
+        hookmetamethod(game, "__namecall", originalNamecall)
+        if charAddedConn then
+            charAddedConn:Disconnect()
+        end
+        if anchorConnection then
+            anchorConnection:Disconnect()
+        end
+    end
+end
+
+function AutoPullRope(perfectPull)
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local RunService = game:GetService("RunService")
+    local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable")
+    
+    local connection
+    local function pull()
+        local args = perfectPull and {{GameQTE = true}} or {{Failed = true}}
+        Remote:FireServer(unpack(args))
+    end
+
+    connection = RunService.Heartbeat:Connect(pull)
+    
+    -- Cleanup function
+    return function()
+        if connection then
+            connection:Disconnect()
+            connection = nil
+        end
+    end
+end
+
 local function CopyDiscordInvite()
     setclipboard("https://discord.gg/agsy")
 end
@@ -317,48 +504,7 @@ Main:Button({
     Title = "Bypass AntiCheat",
     Desc = "Patches anti cheat",
     Callback = function()
-        local function PatchAnticheat()
-            local originalIndex, originalNewIndex
-            
-            -- Prevent velocity checks
-            originalIndex = hookmetamethod(game, "__index", function(self, key)
-                if key == "Velocity" or key == "AssemblyLinearVelocity" then
-                    if tostring(self) == "HumanoidRootPart" and getcallingscript() and getcallingscript().Name:find("AntiCheat") then
-                        return Vector3.zero
-                    end
-                end
-                return originalIndex(self, key)
-            end)
-
-            -- Prevent position checks
-            originalNewIndex = hookmetamethod(game, "__newindex", function(self, key, value)
-                if key == "CFrame" and tostring(self) == "HumanoidRootPart" and getcallingscript() and getcallingscript().Name:find("AntiCheat") then
-                    return nil
-                end
-                return originalNewIndex(self, key, value)
-            end)
-
-            -- Clean ragdolls
-            local function cleanRagdoll(char)
-                for _, v in pairs(char:GetDescendants()) do
-                    if v.Name == "Ragdoll" or v.Name == "Stun" then
-                        v:Destroy()
-                    end
-                end
-            end
-
-            game:GetService("Players").LocalPlayer.CharacterAdded:Connect(cleanRagdoll)
-            if game:GetService("Players").LocalPlayer.Character then
-                cleanRagdoll(game:GetService("Players").LocalPlayer.Character)
-            end
-
-            return function() -- Cleanup
-                hookmetamethod(game, "__index", originalIndex)
-                hookmetamethod(game, "__newindex", originalNewIndex)
-            end
-        end
-
-        PatchAnticheat()
+        AntiCheatPatch()
     end
 })
 
@@ -1111,7 +1257,7 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
--- Add Jump Rope section to Main tab
+-- Add this to the Jump Rope section in the Main tab
 Main:Section({Title = "Jump Rope"})
 Main:Divider()
 
@@ -1132,86 +1278,58 @@ Main:Button({
     end
 })
 
--- Auto Perfect Jump Toggle (Game-Specific Version)
-local autoJumpEnabled = false
-local autoJumpConnection = nil
+-- Auto Perfect Jump Toggle with the new function
+local autoPerfectJumpEnabled = false
+local autoPerfectJumpCleanup
 
 Main:Toggle({
     Title = "Auto Perfect Jump",
-    Desc = "Automatically perfectly jumps",
+    Desc = "Automatically perfectly times jumps",
     Value = false,
     Callback = function(state)
-        autoJumpEnabled = state
+        autoPerfectJumpEnabled = state
         if state then
-            -- Set jump power to 65 for better jumps
-            pcall(function()
-                local player = game:GetService("Players").LocalPlayer
-                local character = workspace.Live:FindFirstChild(player.Name)
-                if character then
-                    local jumpPower = character:FindFirstChild("JumpPowerAmount")
-                    if jumpPower then
-                        jumpPower.Value = 65
-                    end
-                end
-            end)
-            
-            autoJumpConnection = RunService.Heartbeat:Connect(function()
-                pcall(function()
-                    -- Check if current game is Jump Rope
-                    local currentGame = workspace:FindFirstChild("Values") and workspace.Values:FindFirstChild("CurrentGame")
-                    if not currentGame or currentGame.Value ~= "JumpRope" then return end
-                    
-                    -- Jump timing logic
-                    local currentTime = tick()
-                    if not getgenv().lastJumpTime or (currentTime - getgenv().lastJumpTime) >= 4.1 then
-                        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                        if humanoid then
-                            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                            getgenv().lastJumpTime = currentTime
-                        end
-                    end
-                end)
-            end)
+            autoPerfectJumpCleanup = AutoPerfectJumpRope()
         else
-            if autoJumpConnection then
-                autoJumpConnection:Disconnect()
-                autoJumpConnection = nil
+            if autoPerfectJumpCleanup then
+                autoPerfectJumpCleanup()
+                autoPerfectJumpCleanup = nil
             end
-            
-            -- Reset jump power when disabled
-            pcall(function()
-                local player = game:GetService("Players").LocalPlayer
-                local character = workspace.Live:FindFirstChild(player.Name)
-                if character then
-                    local jumpPower = character:FindFirstChild("JumpPowerAmount")
-                    if jumpPower then
-                        jumpPower.Value = 50 -- Default value
-                    end
-                end
-            end)
+        end
+    end
+})
+
+-- Anti Fall Toggle with the new function
+local antiFallEnabled = false
+local antiFallCleanup
+
+Main:Toggle({
+    Title = "Anti Fall",
+    Desc = "Prevents falling during jump rope",
+    Value = false,
+    Callback = function(state)
+        antiFallEnabled = state
+        if state then
+            antiFallCleanup = AntiFallJumpRope()
+        else
+            if antiFallCleanup then
+                antiFallCleanup()
+                antiFallCleanup = nil
+            end
         end
     end
 })
 
 -- Auto-reconnect on character respawn
 LocalPlayer.CharacterAdded:Connect(function(character)
-    if autoJumpEnabled then
-        task.wait(1) -- Wait for character to load
-        
-        -- Set jump power to 65 again
-        pcall(function()
-            local player = game:GetService("Players").LocalPlayer
-            local character = workspace.Live:FindFirstChild(player.Name)
-            if character then
-                local jumpPower = character:FindFirstChild("JumpPowerAmount")
-                if jumpPower then
-                    jumpPower.Value = 65
-                end
-            end
-        end)
-        
-        local toggle = Main:FindFirstChild("Auto Perfect Jump")
-        if toggle then toggle.Callback(true) end
+    task.wait(1) -- Wait for character to load
+    
+    if autoPerfectJumpEnabled then
+        autoPerfectJumpCleanup = AutoPerfectJumpRope()
+    end
+    
+    if antiFallEnabled then
+        antiFallCleanup = AntiFallJumpRope()
     end
 end)
 
@@ -1385,30 +1503,21 @@ Main:Toggle({
 Main:Section({Title = "Tug of War"})
 Main:Divider()
 
-
 local autoPullEnabled = false
-local autoPullConnection
-local pullInterval = 0.001
+local autoPullCleanup
 
 Main:Toggle({
     Title = "Auto Pull Rope",
-    Desc = "Pulls the rope automatically",
+    Desc = "Automatically pulls the rope with perfect timing",
     Value = false,
     Callback = function(state)
         autoPullEnabled = state
         if state then
-            -- Use a fast loop with minimal delay
-            autoPullConnection = task.spawn(function()
-                while autoPullEnabled and task.wait(pullInterval) do
-                    -- Fire the remote as fast as possible
-                    local args = { { PerfectQTE = true } }
-                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable"):FireServer(unpack(args))
-                end
-            end)
+            autoPullCleanup = AutoPullRope(true) -- true for perfect pulls
         else
-            if autoPullConnection then
-                task.cancel(autoPullConnection)
-                autoPullConnection = nil
+            if autoPullCleanup then
+                autoPullCleanup()
+                autoPullCleanup = nil
             end
         end
     end
