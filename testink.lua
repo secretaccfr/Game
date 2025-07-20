@@ -1006,7 +1006,7 @@ Main:Divider()
 -- Optimized Tug of War Auto Pull Rope
 local autoPullEnabled = false
 local autoPullConnection
-local pullInterval = 0.1 -- Adjust speed here (lower = faster pulls)
+local pullInterval = 0.05 -- Adjust speed here (lower = faster pulls)
 
 Main:Toggle({
     Title = "Auto Pull Rope",
