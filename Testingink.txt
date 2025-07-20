@@ -507,6 +507,144 @@ Main:Toggle({
     end
 })
 
+-- Add this to the Red Light Green Light section in the Main tab
+Main:Toggle({
+    Title = "Help Injured",
+    Desc = "Automatically helps downed players in RLGL",
+    Value = false,
+    Callback = function(state)
+        if state then
+            -- Create a table to track recently helped players
+            getgenv().recentlyHelpedPlayers = {}
+            local HELP_COOLDOWN = 30 -- seconds before helping same player again
+            local DOLL_SAFE_DISTANCE = 10 -- studs
+
+            -- Function to find an injured player
+            local function FindInjuredPlayer()
+                -- Get Red Light doll position if exists
+                local doll = workspace:FindFirstChild("RedLightGreenLight") and workspace.RedLightGreenLight:FindFirstChild("doll")
+                local dollPosition = doll and doll:GetPivot().Position
+
+                for _, plr in pairs(Players:GetPlayers()) do
+                    -- Skip conditions
+                    if plr == LocalPlayer then continue end
+                    if not plr.Character then continue end
+                    if not plr.Character:FindFirstChild("HumanoidRootPart") then continue end
+                    if plr:GetAttribute("IsDead") then continue end
+                    if plr.Character:GetAttribute("SafeRedLightGreenLight") then continue end -- Already safe
+                    if plr.Character:FindFirstChild("IsBeingHeld") then continue end
+                    if getgenv().recentlyHelpedPlayers[plr.UserId] then continue end -- Recently helped
+
+                    -- Check doll proximity
+                    if dollPosition then
+                        local distanceToDoll = (plr.Character.HumanoidRootPart.Position - dollPosition).Magnitude
+                        if distanceToDoll < DOLL_SAFE_DISTANCE then
+                            continue -- Too close to doll
+                        end
+                    end
+
+                    -- Check for carry prompt
+                    local CarryPrompt = plr.Character.HumanoidRootPart:FindFirstChild("CarryPrompt")
+                    if CarryPrompt then
+                        return plr, CarryPrompt
+                    end
+                end
+                return nil
+            end
+
+            -- Main helper function
+            local function HelpInjuredPlayer()
+                local injuredPlayer, carryPrompt = FindInjuredPlayer()
+                if not injuredPlayer then
+                    return false
+                end
+
+                -- Store helped player
+                getgenv().recentlyHelpedPlayers[injuredPlayer.UserId] = os.time()
+                
+                -- Temporarily disable AntiFling if enabled
+                local wasAntiFlingEnabled = false
+                if antiFlingConnection then
+                    wasAntiFlingEnabled = true
+                    antiFlingConnection:Disconnect()
+                    antiFlingConnection = nil
+                end
+
+                -- Execute help sequence
+                local success = true
+                pcall(function()
+                    -- Teleport to player
+                    LocalPlayer.Character:PivotTo(injuredPlayer.Character:GetPrimaryPartCFrame())
+                    task.wait(0.2)
+                    
+                    -- Pick them up
+                    fireproximityprompt(carryPrompt)
+                    task.wait(0.5)
+                    
+                    -- Teleport to finish line
+                    local finish = workspace:FindFirstChild("RedLightGreenLightFinish")
+                    if finish then
+                        LocalPlayer.Character:PivotTo(finish:GetPivot())
+                    end
+                    task.wait(0.5)
+                    
+                    -- Release player
+                    game:GetService("ReplicatedStorage").Remotes.ClickedButton:FireServer({tryingtoleave = true})
+                end)
+
+                -- Restore AntiFling if it was enabled
+                if wasAntiFlingEnabled then
+                    antiFlingConnection = RunService.Heartbeat:Connect(function()
+                        pcall(function()
+                            local character = LocalPlayer.Character
+                            if character then
+                                local hrp = character:FindFirstChild("HumanoidRootPart")
+                                local humanoid = character:FindFirstChildOfClass("Humanoid")
+                                
+                                if hrp and humanoid then
+                                    local currentVel = hrp.Velocity
+                                    hrp.Velocity = Vector3.new(currentVel.X * 0.5, currentVel.Y, currentVel.Z * 0.5)
+                                    hrp.RotVelocity = Vector3.new(0, 0, 0)
+                                end
+                            end
+                        end)
+                    end)
+                end
+
+                return success
+            end
+
+            -- Cleanup old entries periodically
+            task.spawn(function()
+                while task.wait(10) and getgenv().helpInjuredEnabled do
+                    local currentTime = os.time()
+                    for userId, helpTime in pairs(getgenv().recentlyHelpedPlayers) do
+                        if currentTime - helpTime > HELP_COOLDOWN then
+                            getgenv().recentlyHelpedPlayers[userId] = nil
+                        end
+                    end
+                end
+            end)
+
+            -- Create the main loop
+            getgenv().helpInjuredEnabled = true
+            getgenv().helpInjuredLoop = task.spawn(function()
+                while task.wait(1) and getgenv().helpInjuredEnabled do
+                    HelpInjuredPlayer()
+                end
+            end)
+        else
+            -- Clean up
+            getgenv().helpInjuredEnabled = false
+            if getgenv().helpInjuredLoop then
+                task.cancel(getgenv().helpInjuredLoop)
+                getgenv().helpInjuredLoop = nil
+            end
+            getgenv().recentlyHelpedPlayers = nil
+        end
+    end
+})
+
 -- Glass Bridge Section
 Main:Section({Title = "Glass Bridge"})
 Main:Divider()
