@@ -1703,60 +1703,28 @@ Utility:Divider()
 -- Initialize emote variables
 local emoteList = {}
 local currentEmoteTrack = nil
-local selectedEmote = nil
+local selectedEmote = nil -- Track the selected emote
 
--- Function to load emotes with retry logic
+-- Function to load emotes
 local function loadEmotes()
     table.clear(emoteList)
     
-    -- Wait for Animations folder with timeout
-    local Animations
-    local startTime = tick()
-    repeat
-        Animations = ReplicatedStorage:FindFirstChild("Animations")
-        task.wait(0.1)
-    until Animations or (tick() - startTime) > 5 -- 5 second timeout
+    local Animations = ReplicatedStorage:WaitForChild("Animations", 10)
+    if not Animations then return end
     
-    if not Animations then
-        warn("Animations folder not found in ReplicatedStorage after 5 seconds")
-        return {}
-    end
-    
-    -- Wait for Emotes folder with timeout
-    local Emotes
-    startTime = tick()
-    repeat
-        Emotes = Animations:FindFirstChild("Emotes")
-        task.wait(0.1)
-    until Emotes or (tick() - startTime) > 5 -- 5 second timeout
-    
-    if not Emotes then
-        warn("Emotes folder not found in Animations after 5 seconds")
-        return {}
-    end
+    local Emotes = Animations:WaitForChild("Emotes", 10)
+    if not Emotes then return end
 
-    local emoteNames = {}
     for _, anim in pairs(Emotes:GetChildren()) do
         if anim:IsA("Animation") and anim.AnimationId ~= "" then
-            emoteList[anim.Name] = {
-                anim = anim.AnimationId,
-                object = anim
-            }
-            table.insert(emoteNames, anim.Name)
+            emoteList[anim.Name] = anim.AnimationId
         end
     end
-    
-    table.sort(emoteNames)
-    return emoteNames
 end
 
 -- Function to play emote
 local function playEmote(emoteName)
-    if not emoteName then 
-        WindUI:Notify({Title = "Emote", Text = "No emote selected!", Duration = 3})
-        return 
-    end
-    
+    -- Get character and humanoid
     local character = LocalPlayer.Character
     if not character then return end
     
@@ -1769,22 +1737,20 @@ local function playEmote(emoteName)
         currentEmoteTrack = nil
     end
 
-    local emoteData = emoteList[emoteName]
-    if not emoteData then
-        WindUI:Notify({Title = "Emote", Text = "Emote data not found!", Duration = 3})
-        return 
-    end
+    -- Load emote animation
+    local animId = emoteList[emoteName]
+    if not animId then return end
 
     local anim = Instance.new("Animation")
-    anim.AnimationId = emoteData.anim
+    anim.AnimationId = animId
 
     -- Play animation
     local track = humanoid:LoadAnimation(anim)
     track.Priority = Enum.AnimationPriority.Action
     track:Play()
     
+    -- Store reference
     currentEmoteTrack = track
-    WindUI:Notify({Title = "Emote", Text = "Playing: "..emoteName, Duration = 3})
 end
 
 -- Function to stop emote
@@ -1792,74 +1758,61 @@ local function stopEmote()
     if currentEmoteTrack then
         currentEmoteTrack:Stop()
         currentEmoteTrack = nil
-        WindUI:Notify({Title = "Emote", Text = "Stopped current emote", Duration = 3})
     end
 end
 
 -- Create dropdown for emotes
 local emoteDropdown = Utility:Dropdown({
-    Title = "Select Emote",
-    Values = {"Loading emotes..."}, -- Initial placeholder
-    Value = nil,
+    Title = "Emotes",
+    List = {}, -- Will be populated after loading
     Callback = function(selected)
-        selectedEmote = selected
-        WindUI:Notify({Title = "Emote", Text = "Selected: "..selected, Duration = 2})
+        selectedEmote = selected -- Store the selected emote
     end
 })
 
 -- Create play and stop buttons
 Utility:Button({
-    Title = "▶ Play Emote",
+    Title = "Play Emote",
     Callback = function()
-        playEmote(selectedEmote)
+        if selectedEmote then
+            playEmote(selectedEmote)
+        end
     end
 })
 
 Utility:Button({
-    Title = "⏹ Stop Emote",
+    Title = "Stop Emote",
     Callback = stopEmote
 })
 
--- Initialize emotes
+-- Initialize emotes on game load
 task.spawn(function()
-    -- First try immediately
-    local emoteNames = loadEmotes()
+    loadEmotes()
     
-    -- If no emotes found, try again after delay
-    if #emoteNames == 0 then
-        task.wait(3)
-        emoteNames = loadEmotes()
+    -- Update dropdown with loaded emotes
+    local emoteNames = {}
+    for name, _ in pairs(emoteList) do
+        table.insert(emoteNames, name)
     end
-
-    -- Update dropdown
-    if #emoteNames > 0 then
-        emoteDropdown:Refresh({
-            Values = emoteNames,
-            Value = emoteNames[1] -- Select first emote by default
-        })
-        selectedEmote = emoteNames[1]
-    else
-        emoteDropdown:Refresh({
-            Values = {"No emotes found"},
-            Value = nil
-        })
-        warn("No emotes could be loaded")
-    end
-
-    -- Monitor for new emotes
+    table.sort(emoteNames)
+    emoteDropdown:Refresh(emoteNames, true)
+    
+    -- Update when new emotes are added
     local Animations = ReplicatedStorage:WaitForChild("Animations", 10)
     if Animations then
         local Emotes = Animations:WaitForChild("Emotes", 10)
         if Emotes then
             Emotes.ChildAdded:Connect(function()
-                task.wait(1) -- Wait for animation to load
-                local newNames = loadEmotes()
-                if #newNames > 0 then
-                    emoteDropdown:Refresh({
-                        Values = newNames,
-                        Value = selectedEmote or newNames[1]
-                    })
+                task.wait()
+                loadEmotes()
+                
+                -- Update dropdown again
+                local newEmoteNames = {}
+                for name, _ in pairs(emoteList) do
+                    table.insert(newEmoteNames, name)
                 end
+                table.sort(newEmoteNames)
+                emoteDropdown:Refresh(newEmoteNames, true)
             end)
         end
     end
