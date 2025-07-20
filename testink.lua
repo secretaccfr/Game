@@ -71,7 +71,7 @@ local CoreGui = game:GetService("CoreGui")
 
 -- Safer default values
 local aimbotLerpFactor = 0.3
-local flingPower = 2500
+local flingPower = 5000
 local movel = 0.05
 local hiddenfling = false
 local glassESPEnabled = false
@@ -271,63 +271,14 @@ local function HandleRedLightGreenLight()
     end
 end
 
--- Replace the existing fling function with this improved version
 local function fling()
     local lp = Players.LocalPlayer
     local character = lp.Character or lp.CharacterAdded:Wait()
     local hrp = character:WaitForChild("HumanoidRootPart")
     
-    -- Enhanced fling variables
-    local flingMultiplier = 5  -- Increased from original
-    local verticalBoost = 5000  -- Increased from 2500
-    local horizontalForce = 3000
-    local movementPattern = 0
-    local lastFlingTime = 0
-    
-    while hiddenfling do
-        RunService.Heartbeat:Wait()
-        if hiddenfling and hrp then
-            -- More aggressive fling pattern
-            local currentTime = tick()
-            if currentTime - lastFlingTime > 0.1 then  -- More frequent flings
-                lastFlingTime = currentTime
-                
-                -- Alternate between different fling patterns
-                movementPattern = (movementPattern + 1) % 4
-                
-                -- Apply powerful forces based on pattern
-                if movementPattern == 0 then
-                    -- Upward fling with twist
-                    hrp.Velocity = Vector3.new(0, verticalBoost, 0)
-                    hrp.RotVelocity = Vector3.new(math.random(-50, 50), math.random(-50, 50), math.random(-50, 50))
-                elseif movementPattern == 1 then
-                    -- Diagonal fling
-                    hrp.Velocity = Vector3.new(horizontalForce * (math.random() > 0.5 and 1 or -1), 
-                                      verticalBoost * 0.7, 
-                                      horizontalForce * (math.random() > 0.5 and 1 or -1))
-                elseif movementPattern == 2 then
-                    -- Spiral fling
-                    hrp.Velocity = Vector3.new(math.sin(currentTime) * horizontalForce, 
-                                      verticalBoost * 0.5, 
-                                      math.cos(currentTime) * horizontalForce)
-                else
-                    -- Random explosive fling
-                    hrp.Velocity = Vector3.new(math.random(-horizontalForce, horizontalForce), 
-                                      verticalBoost, 
-                                      math.random(-horizontalForce, horizontalForce))
-                end
-                
-                -- Additional force application
-                task.spawn(function()
-                    for i = 1, 3 do  -- Apply force multiple times for stronger effect
-                        task.wait(0.03)
-                        if hrp then
-                            hrp.Velocity = hrp.Velocity * flingMultiplier
-                        end
-                    end
-                end)
-            end
-        end
+    if hiddenfling then
+        -- Apply a single, strong fling force
+        hrp.Velocity = Vector3.new(0, flingPower, 0)
     end
 end
 
@@ -411,15 +362,28 @@ Main:Button({
     end
 })
 
--- Update the toggle to use the new fling function
 Main:Toggle({
     Title = "Touch Fling",
-    Desc = "flings anyone who touches you",
+    Desc = "Fling anyone who touches you",
     Value = false,
     Callback = function(state)
         hiddenfling = state
         if state then
-            coroutine.wrap(fling)()
+            -- Connect to the Touched event for immediate fling
+            local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+            local hrp = character:WaitForChild("HumanoidRootPart")
+            
+            getgenv().touchFlingConnection = hrp.Touched:Connect(function(hit)
+                if hiddenfling and hit.Parent and hit.Parent:FindFirstChildOfClass("Humanoid") then
+                    fling()
+                end
+            end)
+        else
+            -- Clean up the connection when disabled
+            if getgenv().touchFlingConnection then
+                getgenv().touchFlingConnection:Disconnect()
+                getgenv().touchFlingConnection = nil
+            end
         end
     end
 })
