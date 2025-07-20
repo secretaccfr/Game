@@ -2716,30 +2716,32 @@ local function isHiderTool(tool)
     return false
 end
 
--- Fixed Hide and Seek ESP
+-- Simplified Hide and Seek ESP
 local function getPlayerRole(player)
-    if player == LocalPlayer then return nil end -- Skip local player
+    -- First check for attributes (more reliable if the game uses them)
+    if player:GetAttribute("IsHider") then return "Hider" end
+    if player:GetAttribute("IsHunter") then return "Hunter" end
     
-    -- 1. First check equipped tools in workspace.Live
-    local liveChar = workspace.Live:FindFirstChild(player.Name)
-    if liveChar then
-        for _, tool in ipairs(liveChar:GetChildren()) do
+    -- Fallback to tool check (less reliable)
+    local character = workspace.Live:FindFirstChild(player.Name)
+    if character then
+        for _, tool in ipairs(character:GetChildren()) do
             if tool:IsA("Tool") then
-                local toolName = string.lower(tool.Name)
-                if string.find(toolName, "knife") then return "Hunter" end
-                if string.find(toolName, "key") or string.find(toolName, "dodge") then return "Hider" end
+                local toolName = tool.Name:lower()
+                if toolName:find("knife") then return "Hunter" end
+                if toolName:find("key") or toolName:find("dodge") then return "Hider" end
             end
         end
     end
     
-    -- 2. Fixed backpack check - no more property access
+    -- Check backpack as fallback
     local backpack = player:FindFirstChild("Backpack")
     if backpack then
         for _, tool in ipairs(backpack:GetChildren()) do
             if tool:IsA("Tool") then
-                local toolName = string.lower(tool.Name)
-                if string.find(toolName, "knife") then return "Hunter" end
-                if string.find(toolName, "key") or string.find(toolName, "dodge") then return "Hider" end
+                local toolName = tool.Name:lower()
+                if toolName:find("knife") then return "Hunter" end
+                if toolName:find("key") or toolName:find("dodge") then return "Hider" end
             end
         end
     end
