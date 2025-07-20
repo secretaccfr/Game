@@ -86,7 +86,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V3.3",
+    Title = "Tuff Guys | Ink Game V3.4",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -102,7 +102,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V3.3",
+    Title = "Tuff Guys | Ink Game V3.4",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -132,8 +132,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V3.3",
-    Desc = "[+] Added Player Hitbox Expander (Combat Tab)",
+    Title = "Changelogs V3.4",
+    Desc = "[+] Added Help injured and Bring injured to start\n[+] Added Dont fall on wrong glass",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -507,6 +507,312 @@ Main:Toggle({
     end
 })
 
+Main:Toggle({
+    Title = "Help Injured",
+    Desc = "Automatically helps downed players in RLGL",
+    Value = false,
+    Callback = function(state)
+        if state then
+            -- Create a table to track recently helped players
+            getgenv().recentlyHelpedPlayers = {}
+            local HELP_COOLDOWN = 30 -- seconds before helping same player again
+            local FINISH_POSITION = CFrame.new(-46, 1024, 110) -- Same as Complete RLGL button
+            
+            -- Define the polygon area where helping is allowed
+            local polygon = {
+                Vector2.new(-52, -515),
+                Vector2.new(115, -515),
+                Vector2.new(115, 84),
+                Vector2.new(-216, 84)
+            }
+            
+            local function isPointInPolygon(point, poly)
+                local inside = false
+                local j = #poly
+                for i = 1, #poly do
+                    local xi, zi = poly[i].X, poly[i].Y
+                    local xj, zj = poly[j].X, poly[j].Y
+                    if ((zi > point.Y) ~= (zj > point.Y)) and
+                        (point.X < (xj - xi) * (point.Y - zi) / (zj - zi + 1e-9) + xi) then
+                        inside = not inside
+                    end
+                    j = i
+                end
+                return inside
+            end
+
+            -- Function to find an injured player
+            local function FindInjuredPlayer()
+                for _, plr in pairs(Players:GetPlayers()) do
+                    -- Skip conditions
+                    if plr == LocalPlayer then continue end
+                    if not plr.Character then continue end
+                    if not plr.Character:FindFirstChild("HumanoidRootPart") then continue end
+                    if plr:GetAttribute("IsDead") then continue end
+                    if plr.Character:GetAttribute("SafeRedLightGreenLight") then continue end -- Already safe
+                    if plr.Character:FindFirstChild("IsBeingHeld") then continue end
+                    if getgenv().recentlyHelpedPlayers[plr.UserId] then continue end -- Recently helped
+
+                    -- Check if player is within the polygon area
+                    local playerPos = plr.Character.HumanoidRootPart.Position
+                    local playerPos2D = Vector2.new(playerPos.X, playerPos.Z)
+                    if not isPointInPolygon(playerPos2D, polygon) then
+                        continue -- Player is outside the polygon
+                    end
+
+                    -- Check for carry prompt
+                    local CarryPrompt = plr.Character.HumanoidRootPart:FindFirstChild("CarryPrompt")
+                    if CarryPrompt then
+                        return plr, CarryPrompt
+                    end
+                end
+                return nil
+            end
+
+            -- Main helper function
+            local function HelpInjuredPlayer()
+                local injuredPlayer, carryPrompt = FindInjuredPlayer()
+                if not injuredPlayer then
+                    return false
+                end
+
+                -- Store helped player
+                getgenv().recentlyHelpedPlayers[injuredPlayer.UserId] = os.time()
+                
+                -- Temporarily disable AntiFling if enabled
+                local wasAntiFlingEnabled = false
+                if antiFlingConnection then
+                    wasAntiFlingEnabled = true
+                    antiFlingConnection:Disconnect()
+                    antiFlingConnection = nil
+                end
+
+                -- Execute help sequence
+                local success = true
+                pcall(function()
+                    -- Teleport to player
+                    LocalPlayer.Character:PivotTo(injuredPlayer.Character:GetPrimaryPartCFrame())
+                    task.wait(0.2)
+                    
+                    -- Pick them up
+                    carryPrompt.HoldDuration = 0  -- Set hold time to zero
+                    fireproximityprompt(carryPrompt)
+                    task.wait(0.5)
+                    
+                    -- Teleport to finish line (same as Complete RLGL button)
+                    LocalPlayer.Character:PivotTo(FINISH_POSITION)
+                    task.wait(0.5)
+                    
+                    -- Release player
+                    game:GetService("ReplicatedStorage").Remotes.ClickedButton:FireServer({tryingtoleave = true})
+                end)
+
+                -- Restore AntiFling if it was enabled
+                if wasAntiFlingEnabled then
+                    antiFlingConnection = RunService.Heartbeat:Connect(function()
+                        pcall(function()
+                            local character = LocalPlayer.Character
+                            if character then
+                                local hrp = character:FindFirstChild("HumanoidRootPart")
+                                local humanoid = character:FindFirstChildOfClass("Humanoid")
+                                
+                                if hrp and humanoid then
+                                    local currentVel = hrp.Velocity
+                                    hrp.Velocity = Vector3.new(currentVel.X * 0.5, currentVel.Y, currentVel.Z * 0.5)
+                                    hrp.RotVelocity = Vector3.new(0, 0, 0)
+                                end
+                            end
+                        end)
+                    end)
+                end
+
+                return success
+            end
+
+            -- Cleanup old entries periodically
+            task.spawn(function()
+                while task.wait(10) and getgenv().helpInjuredEnabled do
+                    local currentTime = os.time()
+                    for userId, helpTime in pairs(getgenv().recentlyHelpedPlayers) do
+                        if currentTime - helpTime > HELP_COOLDOWN then
+                            getgenv().recentlyHelpedPlayers[userId] = nil
+                        end
+                    end
+                end
+            end)
+
+            -- Create the main loop
+            getgenv().helpInjuredEnabled = true
+            getgenv().helpInjuredLoop = task.spawn(function()
+                while task.wait(1) and getgenv().helpInjuredEnabled do
+                    HelpInjuredPlayer()
+                end
+            end)
+        else
+            -- Clean up
+            getgenv().helpInjuredEnabled = false
+            if getgenv().helpInjuredLoop then
+                task.cancel(getgenv().helpInjuredLoop)
+                getgenv().helpInjuredLoop = nil
+            end
+            getgenv().recentlyHelpedPlayers = nil
+        end
+    end
+})
+
+Main:Toggle({
+    Title = "Bring Injured to start",
+    Desc = "Automatically brings injured players to start",
+    Value = false,
+    Callback = function(state)
+        if state then
+            -- Create a table to track recently helped players
+            getgenv().recentlyHelpedPlayers = {}
+            local HELP_COOLDOWN = 30 -- seconds before helping same player again
+            local FINISH_POSITION = CFrame.new(66.0978928, 1023.05371, -571.360046,-0.96942991, -4.975346e-08, -0.245368436,-4.84255942e-08, 1, -1.14450023e-08,0.245368436, 7.86984866e-10, -0.96942991)
+            
+            -- Define the polygon area where helping is allowed
+            local polygon = {
+                Vector2.new(-52, -515),
+                Vector2.new(115, -515),
+                Vector2.new(115, 84),
+                Vector2.new(-216, 84)
+            }
+            
+            local function isPointInPolygon(point, poly)
+                local inside = false
+                local j = #poly
+                for i = 1, #poly do
+                    local xi, zi = poly[i].X, poly[i].Y
+                    local xj, zj = poly[j].X, poly[j].Y
+                    if ((zi > point.Y) ~= (zj > point.Y)) and
+                        (point.X < (xj - xi) * (point.Y - zi) / (zj - zi + 1e-9) + xi) then
+                        inside = not inside
+                    end
+                    j = i
+                end
+                return inside
+            end
+
+            -- Function to find an injured player
+            local function FindInjuredPlayer()
+                for _, plr in pairs(Players:GetPlayers()) do
+                    -- Skip conditions
+                    if plr == LocalPlayer then continue end
+                    if not plr.Character then continue end
+                    if not plr.Character:FindFirstChild("HumanoidRootPart") then continue end
+                    if plr:GetAttribute("IsDead") then continue end
+                    if plr.Character:GetAttribute("SafeRedLightGreenLight") then continue end -- Already safe
+                    if plr.Character:FindFirstChild("IsBeingHeld") then continue end
+                    if getgenv().recentlyHelpedPlayers[plr.UserId] then continue end -- Recently helped
+
+                    -- Check if player is within the polygon area
+                    local playerPos = plr.Character.HumanoidRootPart.Position
+                    local playerPos2D = Vector2.new(playerPos.X, playerPos.Z)
+                    if not isPointInPolygon(playerPos2D, polygon) then
+                        continue -- Player is outside the polygon
+                    end
+
+                    -- Check for carry prompt
+                    local CarryPrompt = plr.Character.HumanoidRootPart:FindFirstChild("CarryPrompt")
+                    if CarryPrompt then
+                        return plr, CarryPrompt
+                    end
+                end
+                return nil
+            end
+
+            -- Main helper function
+            local function HelpInjuredPlayer()
+                local injuredPlayer, carryPrompt = FindInjuredPlayer()
+                if not injuredPlayer then
+                    return false
+                end
+
+                -- Store helped player
+                getgenv().recentlyHelpedPlayers[injuredPlayer.UserId] = os.time()
+                
+                -- Temporarily disable AntiFling if enabled
+                local wasAntiFlingEnabled = false
+                if antiFlingConnection then
+                    wasAntiFlingEnabled = true
+                    antiFlingConnection:Disconnect()
+                    antiFlingConnection = nil
+                end
+
+                -- Execute help sequence
+                local success = true
+                pcall(function()
+                    -- Teleport to player
+                    LocalPlayer.Character:PivotTo(injuredPlayer.Character:GetPrimaryPartCFrame())
+                    task.wait(0.2)
+                    
+                    -- Pick them up
+                    carryPrompt.HoldDuration = 0  -- Set hold time to zero
+                    fireproximityprompt(carryPrompt)
+                    task.wait(0.5)
+                    
+                    -- Teleport to finish line (same as Complete RLGL button)
+                    LocalPlayer.Character:PivotTo(FINISH_POSITION)
+                    task.wait(0.5)
+                    
+                    -- Release player
+                    game:GetService("ReplicatedStorage").Remotes.ClickedButton:FireServer({tryingtoleave = true})
+                end)
+
+                -- Restore AntiFling if it was enabled
+                if wasAntiFlingEnabled then
+                    antiFlingConnection = RunService.Heartbeat:Connect(function()
+                        pcall(function()
+                            local character = LocalPlayer.Character
+                            if character then
+                                local hrp = character:FindFirstChild("HumanoidRootPart")
+                                local humanoid = character:FindFirstChildOfClass("Humanoid")
+                                
+                                if hrp and humanoid then
+                                    local currentVel = hrp.Velocity
+                                    hrp.Velocity = Vector3.new(currentVel.X * 0.5, currentVel.Y, currentVel.Z * 0.5)
+                                    hrp.RotVelocity = Vector3.new(0, 0, 0)
+                                end
+                            end
+                        end)
+                    end)
+                end
+
+                return success
+            end
+
+            -- Cleanup old entries periodically
+            task.spawn(function()
+                while task.wait(10) and getgenv().helpInjuredEnabled do
+                    local currentTime = os.time()
+                    for userId, helpTime in pairs(getgenv().recentlyHelpedPlayers) do
+                        if currentTime - helpTime > HELP_COOLDOWN then
+                            getgenv().recentlyHelpedPlayers[userId] = nil
+                        end
+                    end
+                end
+            end)
+
+            -- Create the main loop
+            getgenv().helpInjuredEnabled = true
+            getgenv().helpInjuredLoop = task.spawn(function()
+                while task.wait(1) and getgenv().helpInjuredEnabled do
+                    HelpInjuredPlayer()
+                end
+            end)
+        else
+            -- Clean up
+            getgenv().helpInjuredEnabled = false
+            if getgenv().helpInjuredLoop then
+                task.cancel(getgenv().helpInjuredLoop)
+                getgenv().helpInjuredLoop = nil
+            end
+            getgenv().recentlyHelpedPlayers = nil
+        end
+    end
+})
+
 -- Glass Bridge Section
 Main:Section({Title = "Glass Bridge"})
 Main:Divider()
@@ -582,6 +888,66 @@ Main:Button({
         local char = LocalPlayer.Character
         if char and char:FindFirstChild("HumanoidRootPart") then
             char:PivotTo(CFrame.new(-203.9, 520.7, -1534.3485) + Vector3.new(0, 5, 0))
+        end
+    end
+})
+
+-- Add this to the Glass Bridge section in the Main tab
+Main:Toggle({
+    Title = "Don't Fall On Wrong Glasses",
+    Desc = "You dont fall on wrong glasses",
+    Value = false,
+    Callback = function(state)
+        local glassHolder = workspace:FindFirstChild("GlassBridge") and workspace.GlassBridge:FindFirstChild("GlassHolder")
+        if not glassHolder then return end
+
+        if state then
+            -- Anchor all glass tiles
+            for _, tilePair in pairs(glassHolder:GetChildren()) do
+                for _, tileModel in pairs(tilePair:GetChildren()) do
+                    if tileModel:IsA("Model") then
+                        for _, part in pairs(tileModel:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.Anchored = true
+                                part.CanCollide = true
+                                -- Remove any break scripts
+                                for _, script in pairs(part:GetDescendants()) do
+                                    if script:IsA("Script") or script:IsA("LocalScript") then
+                                        script:Destroy()
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- Monitor for new glass tiles
+            getgenv().glassAnchorConnection = glassHolder.DescendantAdded:Connect(function(descendant)
+                if descendant:IsA("BasePart") then
+                    descendant.Anchored = true
+                    descendant.CanCollide = true
+                end
+            end)
+        else
+            -- Unanchor all glass tiles
+            for _, tilePair in pairs(glassHolder:GetChildren()) do
+                for _, tileModel in pairs(tilePair:GetChildren()) do
+                    if tileModel:IsA("Model") then
+                        for _, part in pairs(tileModel:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.Anchored = false
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- Clean up connection
+            if getgenv().glassAnchorConnection then
+                getgenv().glassAnchorConnection:Disconnect()
+                getgenv().glassAnchorConnection = nil
+            end
         end
     end
 })
