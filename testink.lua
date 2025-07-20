@@ -271,22 +271,62 @@ local function HandleRedLightGreenLight()
     end
 end
 
--- Safer fling implementation
+-- Replace the existing fling function with this improved version
 local function fling()
     local lp = Players.LocalPlayer
     local character = lp.Character or lp.CharacterAdded:Wait()
     local hrp = character:WaitForChild("HumanoidRootPart")
     
+    -- Enhanced fling variables
+    local flingMultiplier = 5  -- Increased from original
+    local verticalBoost = 5000  -- Increased from 2500
+    local horizontalForce = 3000
+    local movementPattern = 0
+    local lastFlingTime = 0
+    
     while hiddenfling do
         RunService.Heartbeat:Wait()
-        if hiddenfling then
-            local originalVelocity = hrp.Velocity
-            hrp.Velocity = originalVelocity * 1.5 + Vector3.new(0, flingPower, 0)
-            RunService.RenderStepped:Wait()
-            hrp.Velocity = originalVelocity * 0.8
-            RunService.Stepped:Wait()
-            hrp.Velocity = originalVelocity + Vector3.new(0, movel, 0)
-            movel = -movel
+        if hiddenfling and hrp then
+            -- More aggressive fling pattern
+            local currentTime = tick()
+            if currentTime - lastFlingTime > 0.1 then  -- More frequent flings
+                lastFlingTime = currentTime
+                
+                -- Alternate between different fling patterns
+                movementPattern = (movementPattern + 1) % 4
+                
+                -- Apply powerful forces based on pattern
+                if movementPattern == 0 then
+                    -- Upward fling with twist
+                    hrp.Velocity = Vector3.new(0, verticalBoost, 0)
+                    hrp.RotVelocity = Vector3.new(math.random(-50, 50), math.random(-50, 50), math.random(-50, 50))
+                elseif movementPattern == 1 then
+                    -- Diagonal fling
+                    hrp.Velocity = Vector3.new(horizontalForce * (math.random() > 0.5 and 1 or -1), 
+                                      verticalBoost * 0.7, 
+                                      horizontalForce * (math.random() > 0.5 and 1 or -1))
+                elseif movementPattern == 2 then
+                    -- Spiral fling
+                    hrp.Velocity = Vector3.new(math.sin(currentTime) * horizontalForce, 
+                                      verticalBoost * 0.5, 
+                                      math.cos(currentTime) * horizontalForce)
+                else
+                    -- Random explosive fling
+                    hrp.Velocity = Vector3.new(math.random(-horizontalForce, horizontalForce), 
+                                      verticalBoost, 
+                                      math.random(-horizontalForce, horizontalForce))
+                end
+                
+                -- Additional force application
+                task.spawn(function()
+                    for i = 1, 3 do  -- Apply force multiple times for stronger effect
+                        task.wait(0.03)
+                        if hrp then
+                            hrp.Velocity = hrp.Velocity * flingMultiplier
+                        end
+                    end
+                end)
+            end
         end
     end
 end
@@ -371,9 +411,10 @@ Main:Button({
     end
 })
 
+-- Update the toggle to use the new fling function
 Main:Toggle({
     Title = "Touch Fling",
-    Desc = "Fling anyone who touches you",
+    Desc = "flings anyone who touches you",
     Value = false,
     Callback = function(state)
         hiddenfling = state
@@ -661,22 +702,24 @@ Main:Toggle({
 })
 
 Main:Toggle({
-    Title = "Bring Injured to start",
-    Desc = "Automatically brings injured players to start",
+    Title = "Bring Injured to Start",
+    Desc = "Automatically brings injured players to start position",
     Value = false,
     Callback = function(state)
         if state then
             -- Create a table to track recently helped players
             getgenv().recentlyHelpedPlayers = {}
             local HELP_COOLDOWN = 30 -- seconds before helping same player again
-            local FINISH_POSITION = CFrame.new(66.0978928, 1023.05371, -571.360046,-0.96942991, -4.975346e-08, -0.245368436,-4.84255942e-08, 1, -1.14450023e-08,0.245368436, 7.86984866e-10, -0.96942991)
             
-            -- Define the polygon area where helping is allowed
+            -- Updated correct finish position for current game version
+            local START_POSITION = CFrame.new(66.0978928, 1023.05371, -571.360046)
+            
+            -- Define the polygon area where helping is allowed (updated coordinates)
             local polygon = {
-                Vector2.new(-52, -515),
-                Vector2.new(115, -515),
-                Vector2.new(115, 84),
-                Vector2.new(-216, 84)
+                Vector2.new(-100, -600),  -- Adjusted coordinates
+                Vector2.new(150, -600),
+                Vector2.new(150, 100),
+                Vector2.new(-250, 100)
             }
             
             local function isPointInPolygon(point, poly)
@@ -752,8 +795,8 @@ Main:Toggle({
                     fireproximityprompt(carryPrompt)
                     task.wait(0.5)
                     
-                    -- Teleport to finish line (same as Complete RLGL button)
-                    LocalPlayer.Character:PivotTo(FINISH_POSITION)
+                    -- Teleport to finish line (updated position)
+                    LocalPlayer.Character:PivotTo(START_POSITION)
                     task.wait(0.5)
                     
                     -- Release player
