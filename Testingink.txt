@@ -1696,12 +1696,14 @@ game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function()
 end)
 
 -- Utility Tab
+-- Add this to the Utility tab section
 Utility:Section({Title = "Emotes"})
 Utility:Divider()
 
 -- Initialize emote variables
 local emoteList = {}
 local currentEmoteTrack = nil
+local selectedEmote = nil
 
 -- Function to load emotes
 local function loadEmotes()
@@ -1765,17 +1767,19 @@ end
 -- Create dropdown for emotes
 local emoteDropdown = Utility:Dropdown({
     Title = "Emotes",
-    List = {}, -- Will be populated after loading
-    Callback = function(selected) end -- Just for selection, actual play is via button
+    Values = {}, -- Will be populated after loading
+    Value = nil,
+    Callback = function(selected)
+        selectedEmote = selected
+    end
 })
 
 -- Create play and stop buttons
 Utility:Button({
     Title = "Play Emote",
     Callback = function()
-        local selected = emoteDropdown:GetValue()
-        if selected then
-            playEmote(selected)
+        if selectedEmote then
+            playEmote(selectedEmote)
         end
     end
 })
@@ -1795,7 +1799,12 @@ task.spawn(function()
         table.insert(emoteNames, name)
     end
     table.sort(emoteNames)
-    emoteDropdown:Refresh(emoteNames, true)
+    
+    -- Refresh dropdown with new values
+    emoteDropdown:Refresh({
+        Values = emoteNames,
+        Value = nil
+    }, true)
     
     -- Update when new emotes are added
     local Animations = ReplicatedStorage:WaitForChild("Animations", 10)
@@ -1812,7 +1821,11 @@ task.spawn(function()
                     table.insert(newEmoteNames, name)
                 end
                 table.sort(newEmoteNames)
-                emoteDropdown:Refresh(newEmoteNames, true)
+                
+                emoteDropdown:Refresh({
+                    Values = newEmoteNames,
+                    Value = nil
+                }, true)
             end)
         end
     end
