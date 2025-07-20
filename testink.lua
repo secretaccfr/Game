@@ -497,12 +497,6 @@ Main:Toggle({
                 return RLGL_OriginalNamecall(self, ...)
             end)
 
-            WindUI:Notify({
-            Title = "RLGL Godmode",
-            Description = "Red Light Green Light Godmode Enabled",
-            Duration = 2,
-            Callback = function() end
-})
         else
             -- Cleanup
             if RLGL_Connection then
@@ -515,82 +509,6 @@ Main:Toggle({
                 RLGL_OriginalNamecall = nil
             end
             
-            WindUI:Notify({
-    Title = "RLGL Godmode",
-    Description = "Red Light Green Light Godmode Disabled",
-    Duration = 2,
-    Callback = function() end
-})
-        end
-    end
-})
-
-local saveInjuredEnabled = false
-local saveInjuredConnection
-local savedPlayers = {} -- Track which players we've already saved
-
-local function FindInjuredPlayer()
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and not savedPlayers[player] then
-            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local prompt = hrp:FindFirstChild("CarryPrompt")
-                if prompt and not player.Character:FindFirstChild("IsBeingHeld") then
-                    return player, prompt
-                end
-            end
-        end
-    end
-    -- If no new injured players found, reset the savedPlayers table
-    table.clear(savedPlayers)
-    return FindInjuredPlayer() -- Try again with fresh list
-end
-
-local function TransportInjuredPlayer()
-    local injuredPlayer, prompt = FindInjuredPlayer()
-    if not injuredPlayer then return end
-
-    local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-
-    -- Step 1: Teleport to injured player
-    char:PivotTo(injuredPlayer.Character:GetPrimaryPartCFrame())
-    task.wait(0.4)
-    
-    -- Step 2: Fire the carry prompt instantly
-    fireproximityprompt(prompt, 0)
-    task.wait(0.2)
-    
-    -- Step 3: Teleport to finish location
-    char:PivotTo(CFrame.new(-100.8, 1030, 115))
-    task.wait(0.3)
-    
-    -- Step 4: Release player instantly
-    game:GetService("ReplicatedStorage").Remotes.ClickedButton:FireServer({tryingtoleave = true})
-    task.wait(0.1)
-    
-    -- Mark player as saved
-    savedPlayers[injuredPlayer] = true
-end
-
-local function AutoSaveInjured()
-    while saveInjuredEnabled do
-        TransportInjuredPlayer()
-        task.wait(0.5) -- Reduced overall cycle time
-    end
-    -- Clear saved players when disabled
-    table.clear(savedPlayers)
-end
-
-Main:Toggle({
-    Title = "Help Injured Players",
-    Desc = "Carries injured players to safety",
-    Value = false,
-    Callback = function(state)
-        saveInjuredEnabled = state
-        if state then
-            table.clear(savedPlayers) -- Clear any previous saved players
-            coroutine.wrap(AutoSaveInjured)()
         end
     end
 })
@@ -2430,139 +2348,83 @@ Misc:Toggle({
 Visual:Section({Title = "ESP"})
 Visual:Divider()
 
--- ESP Players
+-- Fixed Player ESP
 local playerESPEnabled = false
-local playerESPConnections = {}
 local playerHighlights = {}
-local playerBillboards = {}
+local playerConnections = {}
 
-local function CreatePlayerESP(player)
-    if not player.Character then return end
+local function createPlayerESP(player)
+    if not player or player == LocalPlayer then return end
 
-    -- Clear existing ESP if any
+    -- Clean up existing ESP if any
     if playerHighlights[player] then
         playerHighlights[player]:Destroy()
         playerHighlights[player] = nil
     end
-    if playerBillboards[player] then
-        playerBillboards[player]:Destroy()
-        playerBillboards[player] = nil
-    end
 
     if not playerESPEnabled then return end
 
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "PlayerESP"
-    highlight.Adornee = player.Character
-    highlight.FillColor = Color3.fromRGB(0, 170, 255)  -- Blue
-    highlight.OutlineColor = Color3.fromRGB(0, 100, 255)
-    highlight.FillTransparency = 0.5
-    highlight.Parent = player.Character
-    playerHighlights[player] = highlight
+    local function setupESP(character)
+        if not character or not character:FindFirstChild("Humanoid") then return end
 
-    -- Floating text with health
-    local billboard = Instance.new("BillboardGui")
-    billboard.Adornee = player.Character:WaitForChild("Head")
-    billboard.Size = UDim2.new(0, 100, 0, 40)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.AlwaysOnTop = true
+        -- Create highlight
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "PlayerESP"
+        highlight.Adornee = character
+        highlight.FillColor = Color3.fromRGB(0, 170, 255) -- Blue
+        highlight.OutlineColor = Color3.fromRGB(0, 100, 255)
+        highlight.FillTransparency = 0.5
+        highlight.Parent = character
+        playerHighlights[player] = highlight
 
-    local label = Instance.new("TextLabel")
-    label.Text = player.Name .. " (HP: 100)"
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.TextSize = 14
-    label.BackgroundTransparency = 1
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.Parent = billboard
-    billboard.Parent = player.Character
-    playerBillboards[player] = billboard
-
-    -- Update health display
-    local healthConnection
-    if player.Character:FindFirstChild("Humanoid") then
-        healthConnection = player.Character.Humanoid.HealthChanged:Connect(function(health)
-            label.Text = player.Name .. " (HP: " .. math.floor(health) .. ")"
+        -- Track character changes
+        playerConnections[player] = character:GetPropertyChangedSignal("Parent"):Connect(function()
+            if not character.Parent then
+                highlight:Destroy()
+                playerHighlights[player] = nil
+            end
         end)
     end
 
-    -- Cleanup function
-    local function cleanup()
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
-        if billboard and billboard.Parent then
-            billboard:Destroy()
-        end
-        if healthConnection then
-            healthConnection:Disconnect()
-        end
-        playerHighlights[player] = nil
-        playerBillboards[player] = nil
+    -- Setup ESP for current character
+    if player.Character then
+        setupESP(player.Character)
     end
 
-    -- Track character changes
-    playerESPConnections[player] = player.CharacterAdded:Connect(function(newChar)
-        cleanup()
-        CreatePlayerESP(player)  -- Recreate for new character
-    end)
-
-    -- Auto-cleanup when player leaves
-    playerESPConnections[player.."Removing"] = player.AncestryChanged:Connect(function(_, parent)
-        if not parent then
-            cleanup()
-            if playerESPConnections[player] then
-                playerESPConnections[player]:Disconnect()
-                playerESPConnections[player] = nil
-            end
-        end
-    end)
+    -- Track new characters
+    playerConnections[player.."Added"] = player.CharacterAdded:Connect(setupESP)
 end
 
-local function SetupPlayerESP()
+local function updatePlayerESP()
     -- Clear existing ESP
     for player, highlight in pairs(playerHighlights) do
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
+        if highlight then highlight:Destroy() end
     end
     table.clear(playerHighlights)
-    
-    for player, billboard in pairs(playerBillboards) do
-        if billboard and billboard.Parent then
-            billboard:Destroy()
-        end
+
+    for player, conn in pairs(playerConnections) do
+        if conn then conn:Disconnect() end
     end
-    table.clear(playerBillboards)
-    
-    for player, conn in pairs(playerESPConnections) do
-        if conn then
-            conn:Disconnect()
-        end
-    end
-    table.clear(playerESPConnections)
+    table.clear(playerConnections)
 
     if not playerESPEnabled then return end
 
-    -- Initialize for all players
+    -- Setup ESP for all players
     for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then  -- Skip local player
-            CreatePlayerESP(player)
-        end
+        createPlayerESP(player)
     end
 
     -- Track new players
-    playerESPConnections.playerAdded = Players.PlayerAdded:Connect(function(player)
-        CreatePlayerESP(player)
-    end)
+    playerConnections.playerAdded = Players.PlayerAdded:Connect(createPlayerESP)
 end
 
 Visual:Toggle({
     Title = "ESP Players",
-    Desc = "Highlights all players with health display",
+    Desc = "Highlights all players",
     Value = false,
     Callback = function(state)
         playerESPEnabled = state
-        SetupPlayerESP()
+        updatePlayerESP()
     end
 })
 
@@ -2693,240 +2555,106 @@ Visual:Toggle({
 Visual:Section({Title = "Hide and Seek"})
 Visual:Divider()
 
--- ESP Settings
-local HidersESPEnabled = false  -- Separate toggle for Hiders
-local HuntersESPEnabled = false  -- Separate toggle for Hunters
-local HidersColor = Color3.fromRGB(0, 255, 230)  -- Cyan
-local HuntersColor = Color3.fromRGB(255, 0, 0)   -- Red
-
--- Store ESP highlights
+-- Fixed Hider/Hunter ESP (Using Attributes)
+local HidersESPEnabled = false
+local HuntersESPEnabled = false
 local hiderHighlights = {}
 local hunterHighlights = {}
 
--- Function to check if a tool matches role criteria
-local function isHunterTool(tool)
-    return tool:IsA("Tool") and string.find(string.lower(tool.Name), "knife")
-end
+-- Colors
+local HIDER_COLOR = Color3.fromRGB(0, 170, 255)  -- Blue
+local HUNTER_COLOR = Color3.fromRGB(255, 50, 50) -- Red
 
-local function isHiderTool(tool)
-    if tool:IsA("Tool") then
-        local toolName = string.lower(tool.Name)
-        return string.find(toolName, "key") or string.find(toolName, "dodge")
+local function applyESP(player)
+    if player == LocalPlayer then return end -- Skip self
+
+    -- Cleanup old ESP
+    if hiderHighlights[player] then
+        hiderHighlights[player]:Destroy()
+        hiderHighlights[player] = nil
     end
-    return false
-end
+    if hunterHighlights[player] then
+        hunterHighlights[player]:Destroy()
+        hunterHighlights[player] = nil
+    end
 
--- Simplified Hide and Seek ESP
-local function getPlayerRole(player)
-    -- First check for attributes (more reliable if the game uses them)
-    if player:GetAttribute("IsHider") then return "Hider" end
-    if player:GetAttribute("IsHunter") then return "Hunter" end
-    
-    -- Fallback to tool check (less reliable)
-    local character = workspace.Live:FindFirstChild(player.Name)
-    if character then
-        for _, tool in ipairs(character:GetChildren()) do
-            if tool:IsA("Tool") then
-                local toolName = tool.Name:lower()
-                if toolName:find("knife") then return "Hunter" end
-                if toolName:find("key") or toolName:find("dodge") then return "Hider" end
-            end
+    local character = player.Character or player.CharacterAdded:Wait()
+    if not character then return end
+
+    -- Check attributes for role
+    local isHider = player:GetAttribute("IsHider")
+    local isHunter = player:GetAttribute("IsHunter")
+
+    -- Create highlight if enabled
+    if (isHider and HidersESPEnabled) or (isHunter and HuntersESPEnabled) then
+        local highlight = Instance.new("Highlight")
+        highlight.Adornee = character
+        highlight.FillColor = isHider and HIDER_COLOR or HUNTER_COLOR
+        highlight.OutlineColor = Color3.new(1, 1, 1)
+        highlight.FillTransparency = 0.5
+        highlight.Parent = character
+
+        -- Store in correct table
+        if isHider then
+            hiderHighlights[player] = highlight
+        else
+            hunterHighlights[player] = highlight
         end
     end
-    
-    -- Check backpack as fallback
-    local backpack = player:FindFirstChild("Backpack")
-    if backpack then
-        for _, tool in ipairs(backpack:GetChildren()) do
-            if tool:IsA("Tool") then
-                local toolName = tool.Name:lower()
-                if toolName:find("knife") then return "Hunter" end
-                if toolName:find("key") or toolName:find("dodge") then return "Hider" end
-            end
-        end
-    end
-    
-    return nil
-end
 
--- Function to create/update ESP (simplified version without billboards)
-local function applyESP(character, role)
-    if not character or not character.Parent then return end
-
-    -- Clear existing ESP if any
-    if role == "Hider" and hiderHighlights[character] then
-        hiderHighlights[character]:Destroy()
-        hiderHighlights[character] = nil
-    elseif role == "Hunter" and hunterHighlights[character] then
-        hunterHighlights[character]:Destroy()
-        hunterHighlights[character] = nil
-    end
-
-    -- Only apply if the corresponding toggle is enabled
-    if (role == "Hider" and not HidersESPEnabled) or (role == "Hunter" and not HuntersESPEnabled) then
-        return
-    end
-
-    -- Create highlight (simple version like the old ESP)
-    local highlight = Instance.new("Highlight")
-    highlight.Adornee = character
-    highlight.FillColor = role == "Hider" and HidersColor or HuntersColor
-    highlight.OutlineColor = Color3.new(1, 1, 1)
-    highlight.FillTransparency = 0.5
-    highlight.Parent = character
-    
-    -- Store in the appropriate table
-    if role == "Hider" then
-        hiderHighlights[character] = highlight
-    else
-        hunterHighlights[character] = highlight
-    end
-end
-
--- Function to clear ESP
-local function clearESP()
-    for character, highlight in pairs(hiderHighlights) do
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
-    end
-    table.clear(hiderHighlights)
-    
-    for character, highlight in pairs(hunterHighlights) do
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
-    end
-    table.clear(hunterHighlights)
-end
-
--- Track tool changes in workspace.Live characters
-local function trackLiveCharacter(player)
-    local function checkCharacter(character)
-        -- Check for existing tools
-        local role = getPlayerRole(player)
-        if role then
-            applyESP(character, role)
-        end
-        
-        -- Track tool additions/removals
-        character.ChildAdded:Connect(function(child)
-            if isHunterTool(child) then
-                applyESP(character, "Hunter")
-            elseif isHiderTool(child) then
-                applyESP(character, "Hider")
-            end
-        end)
-        
-        character.ChildRemoved:Connect(function(child)
-            if isHunterTool(child) or isHiderTool(child) then
-                -- Re-check role after tool removal
-                local newRole = getPlayerRole(player)
-                if newRole then
-                    applyESP(character, newRole)
-                else
-                    -- Remove ESP if no longer has role-specific tools
-                    if hiderHighlights[character] then
-                        hiderHighlights[character]:Destroy()
-                        hiderHighlights[character] = nil
-                    end
-                    if hunterHighlights[character] then
-                        hunterHighlights[character]:Destroy()
-                        hunterHighlights[character] = nil
-                    end
-                end
-            end
-        end)
-    end
-    
-    -- Check if character already exists in workspace.Live
-    local liveChar = workspace.Live:FindFirstChild(player.Name)
-    if liveChar then
-        checkCharacter(liveChar)
-    end
-    
-    -- Track when character appears in workspace.Live
-    workspace.Live.ChildAdded:Connect(function(child)
-        if child.Name == player.Name then
-            checkCharacter(child)
-        end
+    -- Track attribute changes
+    player:GetAttributeChangedSignal("IsHider"):Connect(function()
+        applyESP(player) -- Refresh ESP when attribute changes
+    end)
+    player:GetAttributeChangedSignal("IsHunter"):Connect(function()
+        applyESP(player) -- Refresh ESP when attribute changes
     end)
 end
 
--- Handle players
-local function updatePlayers()
-    for _, player in pairs(Players:GetPlayers()) do
-        if player == LocalPlayer then continue end -- Skip local player
-
-        trackLiveCharacter(player)
-        
-        -- Also track backpack changes (for when tools are unequipped)
-        player:GetPropertyChangedSignal("Backpack"):Connect(function()
-            task.wait(0.5) -- Small delay
-            if player.Character then
-                local role = getPlayerRole(player)
-                if role then
-                    applyESP(player.Character, role)
-                else
-                    -- Remove ESP if no longer has role-specific tools
-                    if hiderHighlights[player.Character] then
-                        hiderHighlights[player.Character]:Destroy()
-                        hiderHighlights[player.Character] = nil
-                    end
-                    if hunterHighlights[player.Character] then
-                        hunterHighlights[player.Character]:Destroy()
-                        hunterHighlights[player.Character] = nil
-                    end
-                end
-            end
-        end)
+local function updateAllESP()
+    for _, player in ipairs(Players:GetPlayers()) do
+        applyESP(player)
     end
-end
-
--- Main update function
-local function updateESP()
-    clearESP()
-    if not HidersESPEnabled and not HuntersESPEnabled then return end
-    updatePlayers()
 end
 
 -- Initialize
-Players.PlayerAdded:Connect(function(player)
-    if player == LocalPlayer then return end
-    trackLiveCharacter(player)
-    updateESP()
+Players.PlayerAdded:Connect(applyESP)
+Players.PlayerRemoving:Connect(function(player)
+    if hiderHighlights[player] then
+        hiderHighlights[player]:Destroy()
+        hiderHighlights[player] = nil
+    end
+    if hunterHighlights[player] then
+        hunterHighlights[player]:Destroy()
+        hunterHighlights[player] = nil
+    end
 end)
 
-workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(updateESP) -- Re-apply on respawn
-
--- Initial scan
-for _, player in ipairs(Players:GetPlayers()) do
-    if player ~= LocalPlayer then
-        trackLiveCharacter(player)
-    end
-end
-updateESP()
-
--- Add to Visual tab
+-- Add to Visual Tab
 Visual:Toggle({
     Title = "ESP Hiders",
-    Desc = "Highlights hiders in cyan",
+    Desc = "Highlights hiders",
     Value = false,
     Callback = function(state)
         HidersESPEnabled = state
-        updateESP()
+        updateAllESP()
     end
 })
 
 Visual:Toggle({
     Title = "ESP Hunters",
-    Desc = "Highlights hunters in red",
+    Desc = "Highlights hunters",
     Value = false,
     Callback = function(state)
         HuntersESPEnabled = state
-        updateESP()
+        updateAllESP()
     end
 })
+
+-- Initial scan
+for _, player in ipairs(Players:GetPlayers()) do
+    applyESP(player)
+end
 
 -- Add Key ESP toggle
 local keyESPEnabled = false
