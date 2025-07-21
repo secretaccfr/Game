@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V3.9 Executed",
+            ["title"] = "Ink Game V4 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -83,7 +83,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V3.9",
+    Title = "Tuff Guys | Ink Game V4",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -99,7 +99,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V3.9",
+    Title = "Tuff Guys | Ink Game V4",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -129,8 +129,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V3.9",
-    Desc = "[+] Added Teleport to Hider with a KeyBind",
+    Title = "Changelogs V4",
+    Desc = "[~] Improved Kill Aura And Hider Kill Aura",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -1671,7 +1671,7 @@ local function EnhancedHiderKillaura(enabled)
                     local targetRoot = closestHider.Character.HumanoidRootPart
                     
                     -- Calculate position 1 stud behind hider
-                    local behindOffset = targetRoot.CFrame.LookVector * -1
+                    local behindOffset = targetRoot.CFrame.LookVector * -0.4
                     local targetCFrame = CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position)
                     
                     -- Instant teleport (no tweening)
@@ -2192,7 +2192,7 @@ local function EnhancedKillAura(enabled)
                     local targetRoot = closestPlayer.Character.HumanoidRootPart
                     
                     -- Calculate position 1 stud behind target
-                    local behindOffset = targetRoot.CFrame.LookVector * -1
+                    local behindOffset = targetRoot.CFrame.LookVector * -0.4
                     local targetCFrame = CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position)
                     
                     -- Instant teleport (no tweening)
