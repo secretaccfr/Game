@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V3.5 Executed",
+            ["title"] = "Ink Game V3.6 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -86,7 +86,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V3.5",
+    Title = "Tuff Guys | Ink Game V3.6",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -102,7 +102,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V3.5",
+    Title = "Tuff Guys | Ink Game V3.6",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -132,8 +132,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V3.5",
-    Desc = "[+] Added Anti Fall\n[~] Fixed Auto Perfect Jump\n[~] Improved Bypass Anti Cheat\n[~] Fixed Auto Pull Rope",
+    Title = "Changelogs V3.6",
+    Desc = "[~] Fixed Auto Perfect Jump\n[~] Fixed Bypass Anti Cheat Freezing your screen",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -285,31 +285,29 @@ end
 -- Add these functions before the Window creation
 
 function AutoPerfectJumpRope()
-    local RunService = game:GetService("RunService")
-    local Players = game:GetService("Players")
-    local LocalPlayer = Players.LocalPlayer
+    if not workspace:FindFirstChild("JumpRope") then return end
     
-    local connection
-    local function updateIndicator()
-        local character = LocalPlayer.Character
-        if not character then return end
-        
-        for _, child in ipairs(character:GetDescendants()) do
-            if child:IsA("NumberValue") and string.find(child.Name:lower(), "indicator") then
-                child.Value = 0  -- Sets jump timing to perfect
-                return
-            end
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    -- Find the jump indicator value
+    local indicator = nil
+    for _, obj in ipairs(character:GetDescendants()) do
+        if obj:IsA("NumberValue") and obj.Name:lower():find("indicator") then
+            indicator = obj
+            break
         end
     end
-
-    connection = RunService.Heartbeat:Connect(updateIndicator)
     
-    -- Cleanup function
-    return function()
-        if connection then
-            connection:Disconnect()
-            connection = nil
-        end
+    if indicator then
+        -- Set the indicator to 0 for perfect jump timing
+        indicator.Value = 0
+        
+        -- Fire the jump remote
+        local args = {
+            "Jumped"
+        }
+        game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("JumpRopeRemote"):FireServer(unpack(args))
     end
 end
 
@@ -368,16 +366,14 @@ function AntiCheatPatch()
 
     local Players = game:GetService("Players")
     local LocalPlayer = Players.LocalPlayer
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local RunService = game:GetService("RunService")
     
     -- Store original functions
-    local originalIndex = hookmetamethod(game, "__index", function() end)
-    local originalNewIndex = hookmetamethod(game, "__newindex", function() end)
-    local originalNamecall = hookmetamethod(game, "__namecall", function() end)
+    local originalIndex
+    local originalNewIndex
+    local originalNamecall
     
     -- Velocity spoofing
-    local spoofedVelocity = Vector3.new(0, 0, 0)
     local function newIndex(self, key, value)
         if not checkcaller() and self:IsA("BasePart") and (key == "Velocity" or key == "AssemblyLinearVelocity") then
             return
@@ -385,20 +381,21 @@ function AntiCheatPatch()
         return originalNewIndex(self, key, value)
     end
 
-    -- Remote blocking
+    -- Remote blocking with optimized checks
     local function namecall(self, ...)
         local method = getnamecallmethod()
-        local args = {...}
         
         if method == "FireServer" then
             local remoteName = tostring(self)
             
-            -- Block fall detection remotes
+            -- Optimized remote checks
             if remoteName == "TemporaryReachedBindable" then
+                local args = {...}
                 if args[1] and type(args[1]) == "table" and (args[1].FallingPlayer or args[1].funnydeath) then
                     return nil
                 end
             elseif remoteName == "RandomOtherRemotes" then
+                local args = {...}
                 if args[1] and type(args[1]) == "table" and args[1].FallenOffMap then
                     return nil
                 end
@@ -408,7 +405,7 @@ function AntiCheatPatch()
         return originalNamecall(self, ...)
     end
 
-    -- Prevent anchoring
+    -- Prevent anchoring with optimized checks
     local anchorConnection
     local function onCharacterAdded(character)
         local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 2)
@@ -416,6 +413,7 @@ function AntiCheatPatch()
             if anchorConnection then
                 anchorConnection:Disconnect()
             end
+            -- Only create connection if part exists
             anchorConnection = humanoidRootPart:GetPropertyChangedSignal("Anchored"):Connect(function()
                 if humanoidRootPart.Anchored then
                     humanoidRootPart.Anchored = false
@@ -424,25 +422,55 @@ function AntiCheatPatch()
         end
     end
 
-    -- Apply hooks
-    hookmetamethod(game, "__newindex", newIndex)
-    hookmetamethod(game, "__namecall", namecall)
+    -- Apply hooks with protection
+    local success1, msg1 = pcall(function()
+        originalNewIndex = hookmetamethod(game, "__newindex", newIndex)
+    end)
     
-    -- Setup character monitoring
-    if LocalPlayer.Character then
-        onCharacterAdded(LocalPlayer.Character)
+    local success2, msg2 = pcall(function()
+        originalNamecall = hookmetamethod(game, "__namecall", namecall)
+    end)
+    
+    if not success1 or not success2 then
+        warn("Failed to apply anti-cheat hooks:", msg1 or msg2)
+        return function() end
     end
-    local charAddedConn = LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
     
+    -- Setup character monitoring with protection
+    local charAddedConn
+    if LocalPlayer.Character then
+        pcall(onCharacterAdded, LocalPlayer.Character)
+    end
+    
+    local success3, msg3 = pcall(function()
+        charAddedConn = LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+    end)
+    
+    if not success3 then
+        warn("Failed to setup character monitoring:", msg3)
+    end
+
     -- Cleanup function
     return function()
-        hookmetamethod(game, "__newindex", originalNewIndex)
-        hookmetamethod(game, "__namecall", originalNamecall)
-        if charAddedConn then
-            charAddedConn:Disconnect()
+        -- Only attempt to restore if we successfully hooked
+        if originalNewIndex then
+            pcall(function()
+                hookmetamethod(game, "__newindex", originalNewIndex)
+            end)
         end
+        
+        if originalNamecall then
+            pcall(function()
+                hookmetamethod(game, "__namecall", originalNamecall)
+            end)
+        end
+        
+        if charAddedConn then
+            pcall(charAddedConn.Disconnect, charAddedConn)
+        end
+        
         if anchorConnection then
-            anchorConnection:Disconnect()
+            pcall(anchorConnection.Disconnect, anchorConnection)
         end
     end
 end
@@ -1282,6 +1310,9 @@ Main:Button({
 local autoPerfectJumpEnabled = false
 local autoPerfectJumpCleanup
 
+local autoPerfectJumpEnabled = false
+local autoPerfectJumpConnection
+
 Main:Toggle({
     Title = "Auto Perfect Jump",
     Desc = "Automatically perfectly times jumps",
@@ -1289,11 +1320,13 @@ Main:Toggle({
     Callback = function(state)
         autoPerfectJumpEnabled = state
         if state then
-            autoPerfectJumpCleanup = AutoPerfectJumpRope()
+            autoPerfectJumpConnection = RunService.Heartbeat:Connect(function()
+                AutoPerfectJumpRope()
+            end)
         else
-            if autoPerfectJumpCleanup then
-                autoPerfectJumpCleanup()
-                autoPerfectJumpCleanup = nil
+            if autoPerfectJumpConnection then
+                autoPerfectJumpConnection:Disconnect()
+                autoPerfectJumpConnection = nil
             end
         end
     end
