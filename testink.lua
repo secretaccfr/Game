@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V3.8 Executed",
+            ["title"] = "Ink Game V3.9 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -83,7 +83,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V3.8",
+    Title = "Tuff Guys | Ink Game V3.9",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -99,7 +99,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V3.8",
+    Title = "Tuff Guys | Ink Game V3.9",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -129,8 +129,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V3.8",
-    Desc = "[~] Fixed Fling Aura\n[~] Made Speed Boost A Toggle",
+    Title = "Changelogs V3.9",
+    Desc = "[+] Added Teleport to Hider with a KeyBind",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -1705,6 +1705,85 @@ Main:Toggle({
                 if hiderKillauraEnabled then EnhancedHiderKillaura(true) end
             end)
         end
+    end
+})
+
+-- Add this to the Hide and Seek section in the Main tab
+Main:Button({
+    Title = "Teleport To Hider",
+    Desc = "Teleports behind the nearest hider",
+    Callback = function()
+        if not LocalPlayer.Character then 
+            return
+        end
+        
+        local hider = nil
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player:GetAttribute("IsHider") then
+                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                    if humanoid and humanoid.Health > 0 then
+                        hider = player.Character
+                        break
+                    end
+                end
+            end
+        end
+        
+        if not hider then
+            return
+        end
+        
+        -- Get positions
+        local hiderRoot = hider:FindFirstChild("HumanoidRootPart")
+        local myRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        
+        if not hiderRoot or not myRoot then
+            return
+        end
+        
+        -- Calculate position behind hider
+        local hiderCFrame = hiderRoot.CFrame
+        local behindOffset = hiderCFrame.LookVector * -3  -- 3 studs behind
+        local targetPosition = hiderCFrame.Position + behindOffset
+        
+        -- Teleport to hider
+        LocalPlayer.Character:PivotTo(CFrame.new(targetPosition, hiderCFrame.Position))
+        
+    end
+})
+
+Main:Keybind({
+    Title = "Teleport To Hider Keybind",
+    Desc = "Keybind to teleport to nearest hider",
+    Value = "H",
+    Callback = function(v)
+        local keyCode = Enum.KeyCode[v]
+        
+        game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
+            if not gameProcessed and input.KeyCode == keyCode then
+                if not LocalPlayer.Character then return end
+                
+                local hider = nil
+                for _, player in pairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer and player:GetAttribute("IsHider") then
+                        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                            if humanoid and humanoid.Health > 0 then
+                                hider = player.Character
+                                break
+                            end
+                        end
+                    end
+                end
+                
+                if hider and hider:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local hiderCFrame = hider.HumanoidRootPart.CFrame
+                    local behindOffset = hiderCFrame.LookVector * -3
+                    LocalPlayer.Character:PivotTo(CFrame.new(hiderCFrame.Position + behindOffset, hiderCFrame.Position))
+                end
+            end
+        end)
     end
 })
 
