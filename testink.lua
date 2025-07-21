@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V3.6 Executed",
+            ["title"] = "Ink Game V3.7 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -86,7 +86,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V3.6",
+    Title = "Tuff Guys | Ink Game V3.7",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -102,7 +102,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V3.6",
+    Title = "Tuff Guys | Ink Game V3.7",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -132,8 +132,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V3.6",
-    Desc = "[~] Fixed Auto Perfect Jump\n[~] Fixed Bypass Anti Cheat Freezing your screen",
+    Title = "Changelogs V3.7",
+    Desc = "[~] Fixed Godmode Crashing game and Not turning off even tho you turned it off",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -631,66 +631,90 @@ Main:Toggle({
     Desc = "Prevents detection during red light",
     Value = false,
     Callback = function(state)
+        -- Clean up any existing connections first
+        if rlglModule._CleanupFunction then
+            rlglModule._CleanupFunction()
+            rlglModule._CleanupFunction = nil
+        end
+
         if state then
             if not hookmetamethod then
+                WindUI:Notify({Title = "Error", Desc = "Your executor doesn't support hookmetamethod!", Duration = 5})
                 return
             end
 
-            local lastRootPartCFrame = nil
-            local isGreenLight = true
+            -- Initialize module state
+            rlglModule._IsGreenLight = true
+            rlglModule._LastRootPartCFrame = nil
 
-            -- Detect initial light state
+            -- Function to update light state and player position
+            local function updateLightState(EffectsData)
+                if EffectsData.EffectName == "TrafficLight" then
+                    rlglModule._IsGreenLight = EffectsData.GreenLight == true
+                    
+                    local rootPart = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if rootPart then
+                        rlglModule._LastRootPartCFrame = rootPart.CFrame
+                    end
+                end
+            end
+
+            -- Connect to light changes
+            rlglModule._Connection = ReplicatedStorage.Remotes.Effects.OnClientEvent:Connect(updateLightState)
+
+            -- Hook __namecall to prevent movement during red light
+            local rawmt = getrawmetatable(game)
+            setreadonly(rawmt, false)
+            rlglModule._OriginalNamecall = rawmt.__namecall
+            
+            rawmt.__namecall = newcclosure(function(instance, ...)
+                local args = {...}
+                local method = getnamecallmethod()
+                
+                if method == "FireServer" and instance.ClassName == "RemoteEvent" and instance.Name == "rootCFrame" then
+                    if not rlglModule._IsGreenLight and rlglModule._LastRootPartCFrame then
+                        -- Send cached position during red light
+                        args[1] = rlglModule._LastRootPartCFrame
+                        return rlglModule._OriginalNamecall(instance, unpack(args))
+                    end
+                end
+                
+                return rlglModule._OriginalNamecall(instance, ...)
+            end)
+
+            -- Store cleanup function
+            rlglModule._CleanupFunction = function()
+                -- Disconnect light state listener
+                if rlglModule._Connection then
+                    rlglModule._Connection:Disconnect()
+                    rlglModule._Connection = nil
+                end
+                
+                -- Restore original __namecall
+                if rawmt and rlglModule._OriginalNamecall then
+                    setreadonly(rawmt, false)
+                    rawmt.__namecall = rlglModule._OriginalNamecall
+                    setreadonly(rawmt, true)
+                    rlglModule._OriginalNamecall = nil
+                end
+            end
+
+            -- Initial state check
             local TrafficLightImage = LocalPlayer.PlayerGui:FindFirstChild("ImpactFrames") and
                 LocalPlayer.PlayerGui.ImpactFrames:FindFirstChild("TrafficLightEmpty")
             if TrafficLightImage and ReplicatedStorage:FindFirstChild("Effects") then
                 local lights = ReplicatedStorage.Effects:FindFirstChild("Images")
                 if lights and lights:FindFirstChild("TrafficLights") and lights.TrafficLights:FindFirstChild("GreenLight") then
-                    isGreenLight = TrafficLightImage.Image == lights.TrafficLights.GreenLight.Image
+                    rlglModule._IsGreenLight = TrafficLightImage.Image == lights.TrafficLights.GreenLight.Image
                 end
             end
 
-            local function updateCFrame()
-                local character = LocalPlayer.Character
-                local root = character and character:FindFirstChild("HumanoidRootPart")
-                if root then
-                    lastRootPartCFrame = root.CFrame
-                end
+            -- Initial position capture
+            local character = LocalPlayer.Character
+            local root = character and character:FindFirstChild("HumanoidRootPart")
+            if root then
+                rlglModule._LastRootPartCFrame = root.CFrame
             end
-            updateCFrame()
-
-            -- Listen for light changes
-            RLGL_Connection = ReplicatedStorage.Remotes.Effects.OnClientEvent:Connect(function(data)
-                if data.EffectName == "TrafficLight" then
-                    isGreenLight = data.GreenLight == true
-                    updateCFrame()
-                end
-            end)
-
-            -- Hook the remote call
-            RLGL_OriginalNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-                local args = {...}
-                local method = getnamecallmethod()
-                if tostring(self) == "rootCFrame" and method == "FireServer" then
-                    if state and not isGreenLight and lastRootPartCFrame then
-                        args[1] = lastRootPartCFrame
-                        return RLGL_OriginalNamecall(self, unpack(args))
-                    end
-                end
-                return RLGL_OriginalNamecall(self, ...)
-            end)
-
-        else
-            -- Cleanup
-            if RLGL_Connection then
-                RLGL_Connection:Disconnect()
-                RLGL_Connection = nil
-            end
-            
-            if RLGL_OriginalNamecall then
-                hookmetamethod(game, "__namecall", RLGL_OriginalNamecall)
-                RLGL_OriginalNamecall = nil
-            end
-            
         end
     end
 })
