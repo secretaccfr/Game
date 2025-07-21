@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V3.7 Executed",
+            ["title"] = "Ink Game V3.8 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -71,9 +71,6 @@ local CoreGui = game:GetService("CoreGui")
 
 -- Safer default values
 local aimbotLerpFactor = 0.3
-local flingPower = 5000
-local movel = 0.05
-local hiddenfling = false
 local glassESPEnabled = false
 local glassESPConnections = {}
 local safeGlassHighlights = {}
@@ -86,7 +83,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V3.7",
+    Title = "Tuff Guys | Ink Game V3.8",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -102,7 +99,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V3.7",
+    Title = "Tuff Guys | Ink Game V3.8",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -132,8 +129,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V3.7",
-    Desc = "[~] Fixed Godmode Crashing game and Not turning off even tho you turned it off",
+    Title = "Changelogs V3.8",
+    Desc = "[~] Fixed Fling Aura\n[~] Made Speed Boost A Toggle",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -271,16 +268,6 @@ local function HandleRedLightGreenLight()
     end
 end
 
-local function fling()
-    local lp = Players.LocalPlayer
-    local character = lp.Character or lp.CharacterAdded:Wait()
-    local hrp = character:WaitForChild("HumanoidRootPart")
-    
-    if hiddenfling then
-        -- Apply a single, strong fling force
-        hrp.Velocity = Vector3.new(0, flingPower, 0)
-    end
-end
 
 -- Add these functions before the Window creation
 
@@ -498,7 +485,7 @@ function AutoPullRope(perfectPull)
 end
 
 local function CopyDiscordInvite()
-    setclipboard("https://discord.gg/agsy")
+    setclipboard("https://discord.gg/tuffguys")
 end
 
 Discord:Paragraph({
@@ -536,36 +523,87 @@ Main:Button({
     end
 })
 
+local touchFlingEnabled = false
+local touchFlingConnection = nil
+local touchFlingAntiCheatHook = nil
+
 Main:Toggle({
-    Title = "Touch Fling",
+    Title = "Fling Aura",
     Desc = "Fling anyone who touches you",
     Value = false,
     Callback = function(state)
-        hiddenfling = state
+        touchFlingEnabled = state
         if state then
-            -- Connect to the Touched event for immediate fling
+            -- Hook anti-cheat detection
+            local function hookAntiFling()
+                if not LocalPlayer.Character then return end
+                local Main = LocalPlayer.Character:FindFirstChild("Main")
+                if Main then
+                    Main.Enabled = false
+                    Main.Disabled = true
+                    touchFlingAntiCheatHook = Main:GetPropertyChangedSignal("Enabled"):Connect(function()
+                        Main.Enabled = false
+                        Main.Disabled = true
+                    end)
+                end
+            end
+            
+            -- Connect to touched event
             local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
             local hrp = character:WaitForChild("HumanoidRootPart")
             
-            getgenv().touchFlingConnection = hrp.Touched:Connect(function(hit)
-                if hiddenfling and hit.Parent then
-                    -- Check if the hit part belongs to another player
-                    local player = Players:GetPlayerFromCharacter(hit.Parent)
-                    if player and player ~= LocalPlayer then
-                        -- Get the other player's HRP
-                        local targetHrp = hit.Parent:FindFirstChild("HumanoidRootPart")
-                        if targetHrp then
-                            -- Apply fling to the other player
-                            targetHrp.Velocity = Vector3.new(0, flingPower, 0)
-                        end
+            -- Fling aura logic
+            local movel = 0.1
+            touchFlingConnection = RunService.Heartbeat:Connect(function()
+                if not touchFlingEnabled then return end
+                
+                -- Anti-cheat hook
+                if not touchFlingAntiCheatHook then
+                    hookAntiFling()
+                end
+                
+                -- Fling velocity manipulation
+                if character and hrp then
+                    local originalVel = hrp.Velocity
+                    hrp.Velocity = originalVel * 10000 + Vector3.new(0, 10000, 0)
+                    task.wait()
+                    if character and hrp then
+                        hrp.Velocity = originalVel + Vector3.new(0, movel, 0)
+                        movel = -movel
                     end
                 end
             end)
+            
+            -- Re-hook on character respawn
+            LocalPlayer.CharacterAdded:Connect(function(newChar)
+                if touchFlingEnabled then
+                    character = newChar
+                    hrp = character:WaitForChild("HumanoidRootPart")
+                    hookAntiFling()
+                end
+            end)
+            
+            -- Initial anti-cheat hook
+            hookAntiFling()
         else
-            -- Clean up the connection when disabled
-            if getgenv().touchFlingConnection then
-                getgenv().touchFlingConnection:Disconnect()
-                getgenv().touchFlingConnection = nil
+            -- Clean up
+            if touchFlingConnection then
+                touchFlingConnection:Disconnect()
+                touchFlingConnection = nil
+            end
+            
+            if touchFlingAntiCheatHook then
+                touchFlingAntiCheatHook:Disconnect()
+                touchFlingAntiCheatHook = nil
+                
+                -- Restore Main script if it exists
+                if LocalPlayer.Character then
+                    local Main = LocalPlayer.Character:FindFirstChild("Main")
+                    if Main then
+                        Main.Enabled = true
+                        Main.Disabled = false
+                    end
+                end
             end
         end
     end
@@ -1291,15 +1329,129 @@ local function setDalgonaImmune(enabled)
 end
 
 
+-- Dalgona Crack Immunity System
+local dalgonaImmuneEnabled = false
+local originalDalgonaHook = nil
+local dalgonaRemoteName = "DALGONATEMPREMPTE"  -- Remote name for Dalgona game
+local dalgonaCompletionConnection = nil
+
+local function FixCamera()
+    if workspace.CurrentCamera then
+        pcall(function()
+            workspace.CurrentCamera:Destroy()
+        end)
+    end
+    local new = Instance.new("Camera")
+    new.Parent = workspace
+    workspace.CurrentCamera = new
+    new.CameraType = Enum.CameraType.Custom
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        new.CameraSubject = LocalPlayer.Character.Humanoid
+    end
+end
+
+local function AutoCompleteDalgona()
+    pcall(function()
+        local remote = game:GetService("ReplicatedStorage").Remotes:FindFirstChild(dalgonaRemoteName)
+        if remote then
+            -- Simulate perfect completion
+            remote:FireServer({Success = true})
+            remote:FireServer({Completed = true})
+            remote:FireServer({Perfect = true})
+            
+            -- Fix camera if it gets stuck
+            if workspace.CurrentCamera.CameraType == Enum.CameraType.Scriptable then
+                FixCamera()
+            end
+        end
+    end)
+end
+
+local function SetDalgonaImmune(enabled)
+    if enabled then
+        -- Check if hookmetamethod is available
+        if not hookmetamethod then
+            WindUI:Notify({
+                Title = "Error", 
+                Desc = "Your executor doesn't support hookmetamethod!", 
+                Duration = 5
+            })
+            return false
+        end
+
+        -- Hook to block crack attempts
+        originalDalgonaHook = hookmetamethod(game, "__namecall", function(self, ...)
+            local method = getnamecallmethod()
+            local args = {...}
+
+            -- Block crack attempts silently
+            if tostring(self) == dalgonaRemoteName and method == "FireServer" then
+                if type(args[1]) == "table" and args[1].CrackAmount ~= nil then
+                    WindUI:Notify({
+                        Title = "Dalgona", 
+                        Desc = "Prevented your cookie from cracking!", 
+                        Duration = 3
+                    })
+                    return nil  -- Block the crack
+                end
+            end
+
+            return originalDalgonaHook(self, ...)
+        end)
+
+        -- Auto-completion system
+        dalgonaCompletionConnection = workspace.ChildAdded:Connect(function(child)
+            if child.Name == "DalgonaGame" or child.Name == "Effects" then
+                task.wait(0.5)  -- Wait for game to initialize
+                AutoCompleteDalgona()
+            end
+        end)
+
+        -- Also check existing instances
+        for _, child in pairs(workspace:GetChildren()) do
+            if child.Name == "DalgonaGame" or child.Name == "Effects" then
+                AutoCompleteDalgona()
+                break
+            end
+        end
+
+        WindUI:Notify({
+            Title = "Dalgona", 
+            Desc = "Your cookie is now immune to cracking!", 
+            Duration = 3
+        })
+    else
+        -- Cleanup
+        if originalDalgonaHook then
+            hookmetamethod(game, "__namecall", originalDalgonaHook)
+            originalDalgonaHook = nil
+        end
+
+        if dalgonaCompletionConnection then
+            dalgonaCompletionConnection:Disconnect()
+            dalgonaCompletionConnection = nil
+        end
+    end
+end
+
+-- Add this to your Dalgona section in the Main tab
 Main:Toggle({
-    Title = "Crack Immunity (Buggy)",
-    Desc = "Prevents your Dalgona from cracking",
+    Title = "Crack Immunity",
+    Desc = "Prevents your Dalgona from cracking and auto-completes",
     Value = false,
     Callback = function(state)
         dalgonaImmuneEnabled = state
-        setDalgonaImmune(state)
+        SetDalgonaImmune(state)
     end
 })
+
+-- Auto-reapply on character respawn
+LocalPlayer.CharacterAdded:Connect(function()
+    if dalgonaImmuneEnabled then
+        task.wait(1)  -- Wait for character to load
+        SetDalgonaImmune(true)
+    end
+end)
 
 -- Auto-reapply on character respawn
 LocalPlayer.CharacterAdded:Connect(function()
@@ -3250,10 +3402,46 @@ Misc:Toggle({
     end
 })
 
-Misc:Button({
+-- Speed Boost Toggle
+local speedBoostEnabled = false
+local originalSpeedValue = nil
+
+Misc:Toggle({
     Title = "Speed Boost",
     Desc = "Boosts your speed",
-    Callback = function()
+    Value = false,
+    Callback = function(state)
+        speedBoostEnabled = state
+        pcall(function()
+            local boosts = game:GetService("Players").LocalPlayer:WaitForChild("Boosts")
+            local fasterSprint = boosts:FindFirstChild("Faster Sprint")
+            
+            if fasterSprint then
+                if state then
+                    -- Store original value if not already stored
+                    if originalSpeedValue == nil then
+                        originalSpeedValue = fasterSprint.Value
+                    end
+                    -- Apply boost
+                    fasterSprint.Value = 10
+                else
+                    -- Restore original value if available
+                    if originalSpeedValue then
+                        fasterSprint.Value = originalSpeedValue
+                    else
+                        -- Default to reasonable value if original wasn't stored
+                        fasterSprint.Value = 1
+                    end
+                end
+            end
+        end)
+    end
+})
+
+-- Auto-reapply on character respawn
+LocalPlayer.CharacterAdded:Connect(function(character)
+    if speedBoostEnabled then
+        task.wait(1) -- Wait for character to load
         pcall(function()
             local boosts = game:GetService("Players").LocalPlayer:WaitForChild("Boosts")
             if boosts:FindFirstChild("Faster Sprint") then
@@ -3261,7 +3449,7 @@ Misc:Button({
             end
         end)
     end
-})
+end)
 
 -- Jump Boost Slider
 Misc:Slider({
