@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V4 Executed",
+            ["title"] = "Ink Game V4.1 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -83,7 +83,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V4",
+    Title = "Tuff Guys | Ink Game V4.1",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -99,7 +99,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V4",
+    Title = "Tuff Guys | Ink Game V4.1",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -129,8 +129,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V4",
-    Desc = "[~] Improved Kill Aura And Hider Kill Aura",
+    Title = "Changelogs V4.1",
+    Desc = "[~] Improved Bypass Anti Cheat\n[~] Improved Cracking Immunity\n[~] Improved Anti-Fall\n[+] Added Immortality On All Games [Premium]",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -298,18 +298,25 @@ function AutoPerfectJumpRope()
     end
 end
 
-function AntiFallJumpRope()
+local function AntiFallJumpRope()
     local RunService = game:GetService("RunService")
     local Players = game:GetService("Players")
     local LocalPlayer = Players.LocalPlayer
     local Workspace = game:GetService("Workspace")
     
-    -- Destroy fall detection parts
+    -- Destroy fall detection parts immediately
     local function destroyFallParts()
         local jumpRope = Workspace:FindFirstChild("JumpRope")
         if not jumpRope then return end
         
-        for _, partName in ipairs({"FallColllisionYClient", "FallColllisionY", "COLLISIONCHECK"}) do
+        -- List of parts to destroy
+        local partsToDestroy = {
+            "FallColllisionYClient",
+            "FallColllisionY", 
+            "COLLISIONCHECK"
+        }
+        
+        for _, partName in ipairs(partsToDestroy) do
             local part = jumpRope:FindFirstChild(partName)
             if part then
                 part:Destroy()
@@ -328,12 +335,30 @@ function AntiFallJumpRope()
         
         -- Adjust Y threshold based on the game's map
         if humanoidRootPart.Position.Y < 100 then
-            humanoidRootPart.CFrame = CFrame.new(humanoidRootPart.Position.X, 150, humanoidRootPart.Position.Z)
+            humanoidRootPart.CFrame = CFrame.new(
+                humanoidRootPart.Position.X, 
+                150, 
+                humanoidRootPart.Position.Z
+            )
             humanoidRootPart.Velocity = Vector3.new(0, 0, 0)
         end
     end
 
+    -- Initial destruction of parts
     destroyFallParts()
+    
+    -- Monitor for parts being recreated
+    local jumpRope = Workspace:WaitForChild("JumpRope", 5)
+    if jumpRope then
+        jumpRope.ChildAdded:Connect(function(child)
+            if table.find({"FallColllisionYClient", "FallColllisionY", "COLLISIONCHECK"}, child.Name) then
+                task.wait(0.1) -- Small delay to ensure part is fully initialized
+                child:Destroy()
+            end
+        end)
+    end
+    
+    -- Start fall prevention
     connection = RunService.Heartbeat:Connect(preventFalling)
     
     -- Cleanup function
@@ -392,6 +417,42 @@ function AntiCheatPatch()
         return originalNamecall(self, ...)
     end
 
+    -- Sub patch function for blocking anticheat remotes
+    local function BlockAnticheatRemote(call)
+        if call then
+            if not hookmetamethod then
+                return false
+            end
+            
+            local AnticheatHook
+            AnticheatHook = hookmetamethod(game, "__namecall", function(self, ...)
+                local args = {...}
+                local method = getnamecallmethod()
+
+                if tostring(self) == "TemporaryReachedBindable" and method == "FireServer" then
+                    if args[1] ~= nil and type(args[1]) == "table" and (args[1].FallingPlayer ~= nil or args[1].funnydeath ~= nil) then
+                        return nil
+                    end
+                end
+
+                if tostring(self) == "RandomOtherRemotes" and method == "FireServer" then
+                    if args[1] ~= nil and type(args[1]) == "table" and args[1].FallenOffMap ~= nil then
+                        return nil
+                    end
+                end
+                
+                return AnticheatHook(self, ...)
+            end)
+            
+            return AnticheatHook
+        else
+            if not hookmetamethod then return false end
+            if not getgenv().AnticheatHook then return false end
+            hookmetamethod(game, '__namecall', getgenv().AnticheatHook)
+            return true
+        end
+    end
+
     -- Prevent anchoring with optimized checks
     local anchorConnection
     local function onCharacterAdded(character)
@@ -418,8 +479,12 @@ function AntiCheatPatch()
         originalNamecall = hookmetamethod(game, "__namecall", namecall)
     end)
     
-    if not success1 or not success2 then
-        warn("Failed to apply anti-cheat hooks:", msg1 or msg2)
+    -- Apply the additional anticheat remote block
+    local success3 = pcall(function()
+        getgenv().AnticheatHook = BlockAnticheatRemote(true)
+    end)
+    
+    if not success1 or not success2 or not success3 then
         return function() end
     end
     
@@ -429,12 +494,11 @@ function AntiCheatPatch()
         pcall(onCharacterAdded, LocalPlayer.Character)
     end
     
-    local success3, msg3 = pcall(function()
+    local success4, msg4 = pcall(function()
         charAddedConn = LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
     end)
     
-    if not success3 then
-        warn("Failed to setup character monitoring:", msg3)
+    if not success4 then
     end
 
     -- Cleanup function
@@ -451,6 +515,11 @@ function AntiCheatPatch()
                 hookmetamethod(game, "__namecall", originalNamecall)
             end)
         end
+        
+        -- Cleanup the additional anticheat remote block
+        pcall(function()
+            BlockAnticheatRemote(false)
+        end)
         
         if charAddedConn then
             pcall(charAddedConn.Disconnect, charAddedConn)
@@ -520,6 +589,7 @@ Main:Button({
     Desc = "Patches anti cheat",
     Callback = function()
         AntiCheatPatch()
+        WindUI:Notify({Title = "Anti Cheat Bypass", Desc = "Tuff Anti Cheat Activated", Duration = 5})
     end
 })
 
