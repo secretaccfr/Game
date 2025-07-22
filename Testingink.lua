@@ -624,7 +624,7 @@ local touchFlingConnection = nil
 local touchFlingAntiCheatHook = nil
 
 Main:Toggle({
-    Title = "Fling Aura",
+    Title = "Fling Aura [BUGGED]",
     Desc = "Fling anyone who touches you",
     Value = false,
     Callback = function(state)
@@ -772,8 +772,14 @@ Main:Toggle({
         end
 
         if state then
+            -- Show notification about executor compatibility
+            WindUI:Notify({
+                Title = "RLGL Godmode", 
+                Content = "If godmode RLGL doesn't work, your executor is bad",
+                Duration = 5
+            })
+
             if not hookmetamethod then
-                WindUI:Notify({Title = "Error", Desc = "Your executor doesn't support hookmetamethod!", Duration = 5})
                 return
             end
 
@@ -1554,7 +1560,7 @@ Main:Button({
 })
 
 Main:Toggle({
-    Title = "Auto Perfect Jump",
+    Title = "Auto Perfect Jump [BETA]",
     Desc = "Automatically jumps when rope is close",
     Value = false,
     Callback = function(state)
@@ -1578,7 +1584,7 @@ local antiFallEnabled = false
 local antiFallCleanup
 
 Main:Toggle({
-    Title = "Anti Fall",
+    Title = "Anti Fall [BETA]",
     Desc = "Prevents falling during jump rope",
     Value = false,
     Callback = function(state)
