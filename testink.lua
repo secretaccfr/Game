@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V4.1 Executed",
+            ["title"] = "Ink Game V4.2 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -83,7 +83,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V4.1",
+    Title = "Tuff Guys | Ink Game V4.2",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -99,7 +99,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V4.1",
+    Title = "Tuff Guys | Ink Game V4.2",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -129,8 +129,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V4.1",
-    Desc = "[~] Improved Bypass Anti Cheat\n[~] Improved Cracking Immunity\n[~] Improved Anti-Fall\n[+] Added Immortality On All Games [Premium]",
+    Title = "Changelogs V4.2",
+    Desc = "[~] Improved Key ESP\n[~] Improved Auto Perfect Jump\n[~] Improved Anti Fall\n[~] Improved Auto Pull Rope\n[+] Added Auto SafeZone\n[+] Added Player Teleport",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -265,36 +265,6 @@ local function HandleRedLightGreenLight()
             setreadonly(rawmt, true)
             rlglModule._OriginalNamecall = nil
         end
-    end
-end
-
-
--- Add these functions before the Window creation
-
-function AutoPerfectJumpRope()
-    if not workspace:FindFirstChild("JumpRope") then return end
-    
-    local character = LocalPlayer.Character
-    if not character then return end
-    
-    -- Find the jump indicator value
-    local indicator = nil
-    for _, obj in ipairs(character:GetDescendants()) do
-        if obj:IsA("NumberValue") and obj.Name:lower():find("indicator") then
-            indicator = obj
-            break
-        end
-    end
-    
-    if indicator then
-        -- Set the indicator to 0 for perfect jump timing
-        indicator.Value = 0
-        
-        -- Fire the jump remote
-        local args = {
-            "Jumped"
-        }
-        game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("JumpRopeRemote"):FireServer(unpack(args))
     end
 end
 
@@ -549,24 +519,62 @@ function AntiCheatPatch()
     end
 end
 
-function AutoPullRope(perfectPull)
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local RunService = game:GetService("RunService")
-    local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable")
+local function AutoPerfectJumpRope()
+    -- Check if jump rope game exists
+    local ropeEffects = workspace:FindFirstChild("Effects") and workspace.Effects:FindFirstChild("ropetesting")
+    if not ropeEffects then return end
     
-    local connection
-    local function pull()
-        local args = perfectPull and {{GameQTE = true}} or {{Failed = true}}
-        Remote:FireServer(unpack(args))
+    -- Find the rope's root part
+    local ropeRoot = ropeEffects:FindFirstChild("RootPart")
+    if not ropeRoot then return end
+    
+    -- Find all bone attachments (by name, case insensitive)
+    local boneAttachments = {}
+    for _, descendant in pairs(ropeRoot:GetDescendants()) do
+        if descendant.Name:lower():find("bone") and not descendant.Name:lower():find("^ok") then
+            table.insert(boneAttachments, descendant)
+        end
     end
-
-    connection = RunService.Heartbeat:Connect(pull)
     
-    -- Cleanup function
-    return function()
-        if connection then
-            connection:Disconnect()
-            connection = nil
+    -- If no bone attachments found, return
+    if #boneAttachments == 0 then return end
+    
+    -- Get player character and humanoid
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    
+    -- Check distance to all bone attachments
+    local shouldJump = false
+    for _, bone in ipairs(boneAttachments) do
+        if bone.WorldPosition then
+            local distance = (bone.WorldPosition - rootPart.Position).Magnitude
+            if distance <= 1 then
+                shouldJump = true
+                break
+            end
+        end
+    end
+    
+    -- Jump if any bone is close
+    if shouldJump then
+        -- Jump using humanoid
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        
+        -- Fire the falling player remote every 0.45 seconds
+        if not getgenv().lastJumpTime or (tick() - getgenv().lastJumpTime) >= 0.45 then
+            local args = {
+                {
+                    FallingPlayer = true
+                }
+            }
+            game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable"):FireServer(unpack(args))
+            getgenv().lastJumpTime = tick()
         end
     end
 end
@@ -616,7 +624,7 @@ local touchFlingConnection = nil
 local touchFlingAntiCheatHook = nil
 
 Main:Toggle({
-    Title = "Fling Aura",
+    Title = "Fling Aura [BUGGED]",
     Desc = "Fling anyone who touches you",
     Value = false,
     Callback = function(state)
@@ -764,8 +772,14 @@ Main:Toggle({
         end
 
         if state then
+            -- Show notification about executor compatibility
+            WindUI:Notify({
+                Title = "RLGL Godmode", 
+                Content = "If godmode RLGL doesn't work, your executor is bad",
+                Duration = 5
+            })
+
             if not hookmetamethod then
-                WindUI:Notify({Title = "Error", Desc = "Your executor doesn't support hookmetamethod!", Duration = 5})
                 return
             end
 
@@ -1483,12 +1497,7 @@ local function SetDalgonaImmune(enabled)
             end
         end
 
-        WindUI:Notify({
-            Title = "Dalgona", 
-            Desc = "Your cookie is now immune to cracking!", 
-            Duration = 3
-        })
-    else
+        
         -- Cleanup
         if originalDalgonaHook then
             hookmetamethod(game, "__namecall", originalDalgonaHook)
@@ -1504,7 +1513,7 @@ end
 
 -- Add this to your Dalgona section in the Main tab
 Main:Toggle({
-    Title = "Crack Immunity",
+    Title = "Crack Immunity (Re-Enable if not work)",
     Desc = "Prevents your Dalgona from cracking and auto-completes",
     Value = false,
     Callback = function(state)
@@ -1550,16 +1559,9 @@ Main:Button({
     end
 })
 
--- Auto Perfect Jump Toggle with the new function
-local autoPerfectJumpEnabled = false
-local autoPerfectJumpCleanup
-
-local autoPerfectJumpEnabled = false
-local autoPerfectJumpConnection
-
 Main:Toggle({
-    Title = "Auto Perfect Jump",
-    Desc = "Automatically perfectly times jumps",
+    Title = "Auto Perfect Jump [BETA]",
+    Desc = "Automatically jumps when rope is close",
     Value = false,
     Callback = function(state)
         autoPerfectJumpEnabled = state
@@ -1572,6 +1574,7 @@ Main:Toggle({
                 autoPerfectJumpConnection:Disconnect()
                 autoPerfectJumpConnection = nil
             end
+            getgenv().lastJumpTime = nil
         end
     end
 })
@@ -1581,7 +1584,7 @@ local antiFallEnabled = false
 local antiFallCleanup
 
 Main:Toggle({
-    Title = "Anti Fall",
+    Title = "Anti Fall [BETA]",
     Desc = "Prevents falling during jump rope",
     Value = false,
     Callback = function(state)
@@ -1862,9 +1865,47 @@ Main:Divider()
 local autoPullEnabled = false
 local autoPullCleanup
 
+function AutoPullRope(perfectPull)
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local RunService = game:GetService("RunService")
+    local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable")
+    
+    -- Show notification when activated
+    WindUI:Notify({
+        Title = "Auto Pull Rope",
+        Content = "Pulling Rope Automatically You will see the percentage fly for your team you will carry",
+        Duration = 5,
+    })
+
+    local connection
+    local function pull()
+        -- Faster pulling with optimized args
+        local args = perfectPull and {{GameQTE = true, Perfect = true}} or {{Failed = true}}
+        Remote:FireServer(unpack(args))
+        
+        -- Additional fire for faster effect (adjust delay as needed)
+        task.wait(0.03)
+        Remote:FireServer(unpack(args))
+    end
+
+    -- Use RenderStepped for maximum speed
+    connection = RunService.RenderStepped:Connect(pull)
+    
+    -- Cleanup function
+    return function()
+        if connection then
+            connection:Disconnect()
+            connection = nil
+        end
+    end
+end
+
+local autoPullEnabled = false
+local autoPullCleanup
+
 Main:Toggle({
     Title = "Auto Pull Rope",
-    Desc = "Automatically pulls the rope with perfect timing",
+    Desc = "Automatically pulls the rope with perfect timing ",
     Value = false,
     Callback = function(state)
         autoPullEnabled = state
@@ -2882,6 +2923,80 @@ Utility:Button({
 Utility:Section({Title = "Utilities"})
 Utility:Divider()
 
+local playerDropdown = Utility:Dropdown({
+    Title = "Player To Go",
+    Values = {}, -- Will be populated
+    Callback = function(selected)
+        -- Store the selected player
+        getgenv().selectedPlayerToTeleport = selected
+    end
+})
+
+local function updatePlayerDropdown()
+    local playerNames = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            table.insert(playerNames, player.Name)
+        end
+    end
+    table.sort(playerNames)
+    playerDropdown:Refresh(playerNames, true)
+end
+
+-- Initial update
+updatePlayerDropdown()
+
+-- Update when players join/leave
+Players.PlayerAdded:Connect(function()
+    task.wait() -- Small delay to ensure player is fully added
+    updatePlayerDropdown()
+end)
+
+Players.PlayerRemoving:Connect(function()
+    task.wait() -- Small delay to ensure player is fully removed
+    updatePlayerDropdown()
+end)
+
+Utility:Button({
+    Title = "Go to Player",
+    Desc = "Teleports to the selected player",
+    Callback = function()
+        local selectedName = getgenv().selectedPlayerToTeleport
+        if not selectedName then
+            WindUI:Notify({Title = "Error", Content = "No player selected", Duration = 3})
+            return
+        end
+        
+        local targetPlayer = Players:FindFirstChild(selectedName)
+        if not targetPlayer then
+            WindUI:Notify({Title = "Error", Content = "Player not found", Duration = 3})
+            return
+        end
+        
+        local character = LocalPlayer.Character
+        local targetCharacter = targetPlayer.Character
+        if not character or not targetCharacter then
+            WindUI:Notify({Title = "Error", Content = "Character not found", Duration = 3})
+            return
+        end
+        
+        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+        local targetRootPart = targetCharacter:FindFirstChild("HumanoidRootPart")
+        if not humanoidRootPart or not targetRootPart then
+            WindUI:Notify({Title = "Error", Content = "Root part not found!", Duration = 3})
+            return
+        end
+        
+        -- Calculate position 5 studs behind the target
+        local targetCFrame = targetRootPart.CFrame
+        local behindOffset = targetCFrame.LookVector * -2
+        local targetPosition = targetCFrame.Position + behindOffset
+        
+        -- Teleport to the calculated position
+        character:PivotTo(CFrame.new(targetPosition, targetCFrame.Position))
+    end
+})
+
 -- Invisibility Toggle
 local invisibilityEnabled = false
 local invisibilityCleanup
@@ -3233,6 +3348,118 @@ local function createSafeZone()
     -- Spawn position (near the chair, above platform)
     return platform.Position + Vector3.new(20, 7, 0)
 end
+
+Misc:Slider({
+    Title = "Teleport to Safezone If Health Below",
+    Desc = "Health threshold to auto teleport to safezone",
+    Value = {
+        Min = 1,
+        Max = 100,
+        Default = 30,
+    },
+    Callback = function(value)
+        getgenv().safeZoneHealthThreshold = value
+    end
+})
+
+Misc:Slider({
+    Title = "Teleport Back If Health Above",
+    Desc = "Health threshold to return from safezone",
+    Value = {
+        Min = 1,
+        Max = 100,
+        Default = 80,
+    },
+    Callback = function(value)
+        getgenv().returnHealthThreshold = value
+    end
+})
+
+local autoSafeZoneEnabled = false
+local autoSafeZoneConnection = nil
+local lastPositionBeforeSafeZone = nil
+
+-- In the Auto Safezone section, replace the checkHealthAndTeleport function with this:
+local function checkHealthAndTeleport()
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    
+    -- Check if we're currently in safezone
+    local inSafeZone = safeZoneFolder and safeZoneFolder.Parent ~= nil
+    
+    -- If health is low and not in safezone, teleport to safezone
+    if not inSafeZone and humanoid.Health <= getgenv().safeZoneHealthThreshold then
+        -- Store current position and rotation
+        lastPositionBeforeSafeZone = rootPart.CFrame
+        local safeZonePos = createSafeZone()
+        character:PivotTo(CFrame.new(safeZonePos))
+        WindUI:Notify({Title = "Auto Safezone", Content = "Teleported to safezone due to low health", Duration = 3})
+    end
+    
+    -- If health is restored and in safezone, teleport back
+    if inSafeZone and humanoid.Health >= getgenv().returnHealthThreshold and lastPositionBeforeSafeZone then
+        -- Check if the original position is safe (not in void)
+        local raycastParams = RaycastParams.new()
+        raycastParams.FilterDescendantsInstances = {character}
+        raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+        
+        local rayOrigin = lastPositionBeforeSafeZone.Position + Vector3.new(0, 5, 0)
+        local rayDirection = Vector3.new(0, -100, 0)
+        local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+        
+        if raycastResult then
+            character:PivotTo(lastPositionBeforeSafeZone)
+            if safeZoneFolder then
+                safeZoneFolder:Destroy()
+                safeZoneFolder = nil
+            end
+            WindUI:Notify({Title = "Auto Safezone", Content = "Returned from safezone - health restored", Duration = 3})
+            lastPositionBeforeSafeZone = nil
+        else
+        end
+    end
+end
+
+Misc:Toggle({
+    Title = "Auto Safezone",
+    Desc = "Automatically teleports to safezone when health is low",
+    Value = false,
+    Callback = function(state)
+        autoSafeZoneEnabled = state
+        if state then
+            -- Initialize default values if not set
+            if not getgenv().safeZoneHealthThreshold then
+                getgenv().safeZoneHealthThreshold = 30
+            end
+            if not getgenv().returnHealthThreshold then
+                getgenv().returnHealthThreshold = 80
+            end
+            
+            autoSafeZoneConnection = RunService.Heartbeat:Connect(function()
+                checkHealthAndTeleport()
+            end)
+            
+            -- Also check when character respawns
+            LocalPlayer.CharacterAdded:Connect(function()
+                task.wait(1) -- Wait for character to load
+                if autoSafeZoneEnabled then
+                    checkHealthAndTeleport()
+                end
+            end)
+        else
+            if autoSafeZoneConnection then
+                autoSafeZoneConnection:Disconnect()
+                autoSafeZoneConnection = nil
+            end
+        end
+    end
+})
 
 Misc:Button({
     Title = "Teleport to SafeZone",
@@ -4086,15 +4313,28 @@ for _, player in ipairs(Players:GetPlayers()) do
     applyESP(player)
 end
 
--- Add Key ESP toggle
+-- Add Key ESP toggle with Billboard
 local keyESPEnabled = false
 local keyESPConnections = {}
 local keyHighlights = {}
+local keyBillboards = {}
 
 local function KeyESP(keyModel)
     if not keyModel or not keyModel:IsA("Model") or not keyModel.PrimaryPart then
         return
     end
+
+    -- Clean up existing ESP if any
+    if keyHighlights[keyModel] then
+        keyHighlights[keyModel]:Destroy()
+        keyHighlights[keyModel] = nil
+    end
+    if keyBillboards[keyModel] then
+        keyBillboards[keyModel]:Destroy()
+        keyBillboards[keyModel] = nil
+    end
+
+    if not keyESPEnabled then return end
 
     -- Create Highlight for the key
     local highlight = Instance.new("Highlight")
@@ -4107,6 +4347,29 @@ local function KeyESP(keyModel)
     highlight.Parent = keyModel
     keyHighlights[keyModel] = highlight
 
+    -- Create Billboard with yellow text
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "KeyLabel"
+    billboard.Adornee = keyModel.PrimaryPart
+    billboard.Size = UDim2.new(0, 100, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.LightInfluence = 1
+    billboard.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    local label = Instance.new("TextLabel")
+    label.Text = "KEY"
+    label.TextColor3 = Color3.fromRGB(255, 255, 0) -- Yellow text
+    label.TextSize = 14
+    label.Font = Enum.Font.Oswald
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextStrokeTransparency = 0.5
+    label.TextStrokeColor3 = Color3.new(0, 0, 0) -- Black outline for better visibility
+    label.Parent = billboard
+    billboard.Parent = keyModel
+    keyBillboards[keyModel] = billboard
+
     -- Clean up if the key is destroyed or removed
     local connection
     connection = keyModel.AncestryChanged:Connect(function(_, parent)
@@ -4114,10 +4377,14 @@ local function KeyESP(keyModel)
             if highlight and highlight.Parent then
                 highlight:Destroy()
             end
+            if billboard and billboard.Parent then
+                billboard:Destroy()
+            end
             if connection then
                 connection:Disconnect()
             end
             keyHighlights[keyModel] = nil
+            keyBillboards[keyModel] = nil
         end
     end)
 
@@ -4125,13 +4392,20 @@ local function KeyESP(keyModel)
 end
 
 local function SetupKeyESP()
-    -- Clear existing highlights and connections
+    -- Clear existing ESP
     for key, highlight in pairs(keyHighlights) do
         if highlight and highlight.Parent then
             highlight:Destroy()
         end
     end
     table.clear(keyHighlights)
+    
+    for key, billboard in pairs(keyBillboards) do
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+    end
+    table.clear(keyBillboards)
     
     for key, conn in pairs(keyESPConnections) do
         if conn then
@@ -4159,7 +4433,7 @@ end
 
 Visual:Toggle({
     Title = "ESP Key",
-    Desc = "Highlights keys in Hide and Seek",
+    Desc = "Highlights keys in Hide and Seek with billboard text",
     Value = false,
     Callback = function(state)
         keyESPEnabled = state
