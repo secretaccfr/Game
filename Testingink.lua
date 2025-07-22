@@ -519,24 +519,62 @@ function AntiCheatPatch()
     end
 end
 
-function AutoPullRope(perfectPull)
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local RunService = game:GetService("RunService")
-    local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable")
+local function AutoPerfectJumpRope()
+    -- Check if jump rope game exists
+    local ropeEffects = workspace:FindFirstChild("Effects") and workspace.Effects:FindFirstChild("ropetesting")
+    if not ropeEffects then return end
     
-    local connection
-    local function pull()
-        local args = perfectPull and {{GameQTE = true}} or {{Failed = true}}
-        Remote:FireServer(unpack(args))
+    -- Find the rope's root part
+    local ropeRoot = ropeEffects:FindFirstChild("RootPart")
+    if not ropeRoot then return end
+    
+    -- Find all bone attachments (by name, case insensitive)
+    local boneAttachments = {}
+    for _, descendant in pairs(ropeRoot:GetDescendants()) do
+        if descendant.Name:lower():find("bone") and not descendant.Name:lower():find("^ok") then
+            table.insert(boneAttachments, descendant)
+        end
     end
-
-    connection = RunService.Heartbeat:Connect(pull)
     
-    -- Cleanup function
-    return function()
-        if connection then
-            connection:Disconnect()
-            connection = nil
+    -- If no bone attachments found, return
+    if #boneAttachments == 0 then return end
+    
+    -- Get player character and humanoid
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    
+    -- Check distance to all bone attachments
+    local shouldJump = false
+    for _, bone in ipairs(boneAttachments) do
+        if bone.WorldPosition then
+            local distance = (bone.WorldPosition - rootPart.Position).Magnitude
+            if distance <= 1 then
+                shouldJump = true
+                break
+            end
+        end
+    end
+    
+    -- Jump if any bone is close
+    if shouldJump then
+        -- Jump using humanoid
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        
+        -- Fire the falling player remote every 0.45 seconds
+        if not getgenv().lastJumpTime or (tick() - getgenv().lastJumpTime) >= 0.45 then
+            local args = {
+                {
+                    FallingPlayer = true
+                }
+            }
+            game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable"):FireServer(unpack(args))
+            getgenv().lastJumpTime = tick()
         end
     end
 end
@@ -1515,49 +1553,6 @@ Main:Button({
     end
 })
 
--- Auto Perfect Jump Toggle with the new function
-local autoPerfectJumpEnabled = false
-local autoPerfectJumpCleanup
-
-local autoPerfectJumpEnabled = false
-local autoPerfectJumpConnection
-
-local function AutoPerfectJumpRope()
-    -- Check if jump rope game exists
-    local ropeEffects = workspace:FindFirstChild("Effects") and workspace.Effects:FindFirstChild("ropetesting")
-    if not ropeEffects then return end
-    
-    -- Find the rope circle part
-    local ropeCircle = ropeEffects:FindFirstChild("Circle.002")
-    if not ropeCircle then return end
-    
-    -- Get player character and humanoid
-    local character = LocalPlayer.Character
-    if not character then return end
-    
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-    
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then return end
-    
-    -- Calculate distance to rope circle
-    local distance = (ropeCircle.Position - rootPart.Position).Magnitude
-    
-    -- Jump when rope is close (within 2.5 studs)
-    if distance <= 1.3 then
-        -- Fire jump remote
-        local args = {
-            "Jumped"
-        }
-        game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("JumpRopeRemote"):FireServer(unpack(args))
-        
-        -- Also trigger jump animation
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-    end
-end
-
--- Then update your toggle to use this function:
 Main:Toggle({
     Title = "Auto Perfect Jump",
     Desc = "Automatically jumps when rope is close",
@@ -1573,6 +1568,7 @@ Main:Toggle({
                 autoPerfectJumpConnection:Disconnect()
                 autoPerfectJumpConnection = nil
             end
+            getgenv().lastJumpTime = nil
         end
     end
 })
@@ -1863,9 +1859,47 @@ Main:Divider()
 local autoPullEnabled = false
 local autoPullCleanup
 
+function AutoPullRope(perfectPull)
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local RunService = game:GetService("RunService")
+    local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable")
+    
+    -- Show notification when activated
+    WindUI:Notify({
+        Title = "Auto Pull Rope",
+        Content = "Pulling Rope Automatically You will see the percentage fly for your team you will carry",
+        Duration = 5,
+    })
+
+    local connection
+    local function pull()
+        -- Faster pulling with optimized args
+        local args = perfectPull and {{GameQTE = true, Perfect = true}} or {{Failed = true}}
+        Remote:FireServer(unpack(args))
+        
+        -- Additional fire for faster effect (adjust delay as needed)
+        task.wait(0.03)
+        Remote:FireServer(unpack(args))
+    end
+
+    -- Use RenderStepped for maximum speed
+    connection = RunService.RenderStepped:Connect(pull)
+    
+    -- Cleanup function
+    return function()
+        if connection then
+            connection:Disconnect()
+            connection = nil
+        end
+    end
+end
+
+local autoPullEnabled = false
+local autoPullCleanup
+
 Main:Toggle({
     Title = "Auto Pull Rope",
-    Desc = "Automatically pulls the rope with perfect timing",
+    Desc = "Automatically pulls the rope with perfect timing ",
     Value = false,
     Callback = function(state)
         autoPullEnabled = state
@@ -4185,15 +4219,28 @@ for _, player in ipairs(Players:GetPlayers()) do
     applyESP(player)
 end
 
--- Add Key ESP toggle
+-- Add Key ESP toggle with Billboard
 local keyESPEnabled = false
 local keyESPConnections = {}
 local keyHighlights = {}
+local keyBillboards = {}
 
 local function KeyESP(keyModel)
     if not keyModel or not keyModel:IsA("Model") or not keyModel.PrimaryPart then
         return
     end
+
+    -- Clean up existing ESP if any
+    if keyHighlights[keyModel] then
+        keyHighlights[keyModel]:Destroy()
+        keyHighlights[keyModel] = nil
+    end
+    if keyBillboards[keyModel] then
+        keyBillboards[keyModel]:Destroy()
+        keyBillboards[keyModel] = nil
+    end
+
+    if not keyESPEnabled then return end
 
     -- Create Highlight for the key
     local highlight = Instance.new("Highlight")
@@ -4206,6 +4253,29 @@ local function KeyESP(keyModel)
     highlight.Parent = keyModel
     keyHighlights[keyModel] = highlight
 
+    -- Create Billboard with yellow text
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "KeyLabel"
+    billboard.Adornee = keyModel.PrimaryPart
+    billboard.Size = UDim2.new(0, 100, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.LightInfluence = 1
+    billboard.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    local label = Instance.new("TextLabel")
+    label.Text = "KEY"
+    label.TextColor3 = Color3.fromRGB(255, 255, 0) -- Yellow text
+    label.TextSize = 14
+    label.Font = Enum.Font.Oswald
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextStrokeTransparency = 0.5
+    label.TextStrokeColor3 = Color3.new(0, 0, 0) -- Black outline for better visibility
+    label.Parent = billboard
+    billboard.Parent = keyModel
+    keyBillboards[keyModel] = billboard
+
     -- Clean up if the key is destroyed or removed
     local connection
     connection = keyModel.AncestryChanged:Connect(function(_, parent)
@@ -4213,10 +4283,14 @@ local function KeyESP(keyModel)
             if highlight and highlight.Parent then
                 highlight:Destroy()
             end
+            if billboard and billboard.Parent then
+                billboard:Destroy()
+            end
             if connection then
                 connection:Disconnect()
             end
             keyHighlights[keyModel] = nil
+            keyBillboards[keyModel] = nil
         end
     end)
 
@@ -4224,13 +4298,20 @@ local function KeyESP(keyModel)
 end
 
 local function SetupKeyESP()
-    -- Clear existing highlights and connections
+    -- Clear existing ESP
     for key, highlight in pairs(keyHighlights) do
         if highlight and highlight.Parent then
             highlight:Destroy()
         end
     end
     table.clear(keyHighlights)
+    
+    for key, billboard in pairs(keyBillboards) do
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+    end
+    table.clear(keyBillboards)
     
     for key, conn in pairs(keyESPConnections) do
         if conn then
@@ -4258,7 +4339,7 @@ end
 
 Visual:Toggle({
     Title = "ESP Key",
-    Desc = "Highlights keys in Hide and Seek",
+    Desc = "Highlights keys in Hide and Seek with billboard text",
     Value = false,
     Callback = function(state)
         keyESPEnabled = state
