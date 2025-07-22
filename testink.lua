@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V4.3 Executed",
+            ["title"] = "Ink Game V4.4 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -83,7 +83,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V4.3",
+    Title = "Tuff Guys | Ink Game V4.4",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -99,7 +99,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V4.3",
+    Title = "Tuff Guys | Ink Game V4.4",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -129,8 +129,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V4.3",
-    Desc = "[~] Improved Auto Perfect Jump\n[+] Added Auto Balance for Auto Perfect Jump\n[+] Added Pull Rope Mods [BLATANT/LEGIT]\n[~] Fixed RLGL Godmode Being Active Always",
+    Title = "Changelogs V4.4",
+    Desc = "[+] Seperated Auto Balance From Auto Perfect Jump\n[~] Improved Auto Balance\n[~] Improved Legit Mode Tug Of War Pull",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -565,20 +565,6 @@ local function AutoPerfectJumpRope()
     if shouldJump then
         -- Jump using humanoid
         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        
-        -- Simulate left + right click simultaneously (instead of firing remote)
-        local VirtualInputManager = game:GetService("VirtualInputManager")
-        
-        -- Left Click Down + Right Click Down
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)  -- Left
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 2)  -- Right
-        
-        -- Release after 0.05 seconds (quick tap)
-        task.wait(0.05)
-        
-        -- Left Click Up + Right Click Up
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)  -- Left
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 2)  -- Right
         
         -- Repeat every 0.5 seconds while rope is near
         if not getgenv().lastJumpTime or (tick() - getgenv().lastJumpTime) >= 0.5 then
@@ -1552,7 +1538,7 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
--- Add this to the Jump Rope section in the Main tab
+-- Jump Rope Section
 Main:Section({Title = "Jump Rope"})
 Main:Divider()
 
@@ -1573,9 +1559,69 @@ Main:Button({
     end
 })
 
+-- Auto Balance Variables
+local autoBalanceEnabled = false
+local autoBalanceConnection = nil
+
+local function AutoBalanceJumpRope()
+    if not autoBalanceEnabled then return end
+    
+    -- Check if we're in the jump rope game
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    -- Check if we have the jump rope UI active
+    local impactFrames = LocalPlayer.PlayerGui:FindFirstChild("ImpactFrames")
+    if not impactFrames then return end
+    
+    local jumpRopeUI = impactFrames:FindFirstChild("Main") -- The jump rope UI element
+    if not jumpRopeUI then return end
+    
+    -- Get the current balance value
+    local numberValue = jumpRopeUI:FindFirstChildWhichIsA("NumberValue")
+    if not numberValue then return end
+    
+    local currentValue = numberValue.Value
+    
+    -- Determine which direction to press based on current value
+    if currentValue > 10 then
+        -- Press left (A key)
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.A, false, game)
+        task.wait(0.05)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.A, false, game)
+    elseif currentValue < -10 then
+        -- Press right (D key)
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.D, false, game)
+        task.wait(0.05)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.D, false, game)
+    end
+end
+
+-- Auto Balance Toggle
 Main:Toggle({
-    Title = "Auto Perfect Jump & Balance [BETA]",
-    Desc = "Automatically jumps when rope is close + clicks",
+    Title = "Auto Balance [BETA]",
+    Desc = "Automatically balances the jump rope indicator",
+    Value = false,
+    Callback = function(state)
+        autoBalanceEnabled = state
+        if state then
+            autoBalanceConnection = RunService.Heartbeat:Connect(AutoBalanceJumpRope)
+        else
+            if autoBalanceConnection then
+                autoBalanceConnection:Disconnect()
+                autoBalanceConnection = nil
+            end
+        end
+    end
+})
+
+local autoPerfectJumpEnabled = false
+local autoPerfectJumpConnection = nil
+
+-- Auto Perfect Jump Toggle
+Main:Toggle({
+    Title = "Auto Perfect Jump",
+    Desc = "Automatically jumps when rope is close",
     Value = false,
     Callback = function(state)
         autoPerfectJumpEnabled = state
@@ -1882,12 +1928,11 @@ local autoPullMode = "Blatant" -- Default mode
 
 function AutoPullRope(perfectPull)
     if autoPullMode == "Blatant" then
-        -- Original blatant mode code
+        -- Original blatant mode code remains the same
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
         local RunService = game:GetService("RunService")
         local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable")
         
-        -- Show notification when activated
         WindUI:Notify({
             Title = "Auto Pull Rope",
             Content = "Pulling Rope Automatically You will see the percentage fly for your team you will carry",
@@ -1896,19 +1941,14 @@ function AutoPullRope(perfectPull)
 
         local connection
         local function pull()
-            -- Faster pulling with optimized args
             local args = perfectPull and {{GameQTE = true, Perfect = true}} or {{Failed = true}}
             Remote:FireServer(unpack(args))
-            
-            -- Additional fire for faster effect (adjust delay as needed)
             task.wait(0.03)
             Remote:FireServer(unpack(args))
         end
 
-        -- Use RenderStepped for maximum speed
         connection = RunService.RenderStepped:Connect(pull)
         
-        -- Cleanup function
         return function()
             if connection then
                 connection:Disconnect()
@@ -1916,25 +1956,44 @@ function AutoPullRope(perfectPull)
             end
         end
     else
-        -- New legit mode code
+        -- New improved legit mode with space auto-clicker
         local connection
+        local lastClickTime = 0
+        local clickCooldown = 0.1 -- seconds between clicks
+        
         local function checkAndPull()
+            -- Check if the QTE UI exists
             local playerGui = game:GetService("Players").LocalPlayer.PlayerGui
-            if not playerGui:FindFirstChild("QTEEvents") then return end
+            local qteEvents = playerGui:FindFirstChild("QTEEvents")
+            if not qteEvents then return end
             
-            local progress = playerGui.QTEEvents.Progress
-            if not progress or not progress:FindFirstChild("GoalDot") or not progress:FindFirstChild("CrossHair") then return end
+            local progress = qteEvents:FindFirstChild("Progress")
+            if not progress then return end
             
-            local goalDot = progress.GoalDot
-            local crossHair = progress.CrossHair
+            -- Get the crosshair and goal dot elements
+            local crossHair = progress:FindFirstChild("CrossHair")
+            local goalDot = progress:FindFirstChild("GoalDot")
+            if not crossHair or not goalDot then return end
             
-            -- Check if crosshair rotation matches goal dot rotation
-            if math.abs(crossHair.AbsoluteRotation - goalDot.AbsoluteRotation) < 2 then
-                -- Simulate mouse click
-                local VirtualInputManager = game:GetService("VirtualInputManager")
-                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-                task.wait(0.05)
-                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+            -- Calculate angle difference (0-360)
+            local angleDiff = math.abs((crossHair.Rotation - goalDot.Rotation + 180) % 360 - 180)
+            
+            -- If the crosshair is close enough to the goal dot
+            if angleDiff <= 26 then -- 26 degrees is the threshold from the original script
+                local currentTime = tick()
+                if currentTime - lastClickTime >= clickCooldown then
+                    -- Simulate space bar press
+                    local VirtualInputManager = game:GetService("VirtualInputManager")
+                    
+                    -- Press space down
+                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+                    task.wait(0.05) -- Short press duration
+                    
+                    -- Release space
+                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+                    
+                    lastClickTime = currentTime
+                end
             end
         end
 
@@ -1952,8 +2011,8 @@ end
 -- Add the mode dropdown
 Main:Dropdown({
     Title = "Pull Mode",
-    Values = {"Blatant [BETA]", "Legit"},
-    Default = "Blatant [BETA]",
+    Values = {"Blatant", "Legit"},
+    Default = "Blatant",
     Callback = function(selected)
         autoPullMode = selected
         -- If auto pull is already running, restart it with new mode
