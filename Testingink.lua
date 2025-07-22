@@ -130,7 +130,7 @@ local UpdateLogs = MainSection:Tab({
 
 UpdateLogs:Paragraph({
     Title = "Changelogs V4.2",
-    Desc = "[~] ",
+    Desc = "[~] Improved Key ESP\n[~] Improved Auto Perfect Jump\n[~] Improved Anti Fall\n[~] Improved Auto Pull Rope\n[+] Added Auto SafeZone\n[+] Added Player Teleport",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -1864,48 +1864,95 @@ Main:Divider()
 
 local autoPullEnabled = false
 local autoPullCleanup
+local autoPullMode = "Blatant" -- Default mode
 
 function AutoPullRope(perfectPull)
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local RunService = game:GetService("RunService")
-    local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable")
-    
-    -- Show notification when activated
-    WindUI:Notify({
-        Title = "Auto Pull Rope",
-        Content = "Pulling Rope Automatically You will see the percentage fly for your team you will carry",
-        Duration = 5,
-    })
-
-    local connection
-    local function pull()
-        -- Faster pulling with optimized args
-        local args = perfectPull and {{GameQTE = true, Perfect = true}} or {{Failed = true}}
-        Remote:FireServer(unpack(args))
+    if autoPullMode == "Blatant" then
+        -- Original blatant mode code
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local RunService = game:GetService("RunService")
+        local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable")
         
-        -- Additional fire for faster effect (adjust delay as needed)
-        task.wait(0.03)
-        Remote:FireServer(unpack(args))
-    end
+        -- Show notification when activated
+        WindUI:Notify({
+            Title = "Auto Pull Rope",
+            Content = "Pulling Rope Automatically You will see the percentage fly for your team you will carry",
+            Duration = 5,
+        })
 
-    -- Use RenderStepped for maximum speed
-    connection = RunService.RenderStepped:Connect(pull)
-    
-    -- Cleanup function
-    return function()
-        if connection then
-            connection:Disconnect()
-            connection = nil
+        local connection
+        local function pull()
+            -- Faster pulling with optimized args
+            local args = perfectPull and {{GameQTE = true, Perfect = true}} or {{Failed = true}}
+            Remote:FireServer(unpack(args))
+            
+            -- Additional fire for faster effect (adjust delay as needed)
+            task.wait(0.03)
+            Remote:FireServer(unpack(args))
+        end
+
+        -- Use RenderStepped for maximum speed
+        connection = RunService.RenderStepped:Connect(pull)
+        
+        -- Cleanup function
+        return function()
+            if connection then
+                connection:Disconnect()
+                connection = nil
+            end
+        end
+    else
+        -- New legit mode code
+        local connection
+        local function checkAndPull()
+            local playerGui = game:GetService("Players").LocalPlayer.PlayerGui
+            if not playerGui:FindFirstChild("QTEEvents") then return end
+            
+            local progress = playerGui.QTEEvents.Progress
+            if not progress or not progress:FindFirstChild("GoalDot") or not progress:FindFirstChild("CrossHair") then return end
+            
+            local goalDot = progress.GoalDot
+            local crossHair = progress.CrossHair
+            
+            -- Check if crosshair rotation matches goal dot rotation
+            if math.abs(crossHair.AbsoluteRotation - goalDot.AbsoluteRotation) < 5 then -- Small tolerance
+                -- Simulate mouse click
+                local VirtualInputManager = game:GetService("VirtualInputManager")
+                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                task.wait(0.05)
+                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+            end
+        end
+
+        connection = RunService.RenderStepped:Connect(checkAndPull)
+        
+        return function()
+            if connection then
+                connection:Disconnect()
+                connection = nil
+            end
         end
     end
 end
 
-local autoPullEnabled = false
-local autoPullCleanup
+-- Add the mode dropdown
+Main:Dropdown({
+    Title = "Pull Mode",
+    Values = {"Blatant", "Legit"},
+    Default = "Blatant",
+    Callback = function(selected)
+        autoPullMode = selected
+        -- If auto pull is already running, restart it with new mode
+        if autoPullEnabled and autoPullCleanup then
+            autoPullCleanup()
+            autoPullCleanup = AutoPullRope(true)
+        end
+    end
+})
 
 Main:Toggle({
     Title = "Auto Pull Rope",
-    Desc = "Automatically pulls the rope with perfect timing ",
+    Desc = "Automatically pulls the rope with perfect timing",
     Value = false,
     Callback = function(state)
         autoPullEnabled = state
@@ -2923,6 +2970,80 @@ Utility:Button({
 Utility:Section({Title = "Utilities"})
 Utility:Divider()
 
+local playerDropdown = Utility:Dropdown({
+    Title = "Player To Go",
+    Values = {}, -- Will be populated
+    Callback = function(selected)
+        -- Store the selected player
+        getgenv().selectedPlayerToTeleport = selected
+    end
+})
+
+local function updatePlayerDropdown()
+    local playerNames = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            table.insert(playerNames, player.Name)
+        end
+    end
+    table.sort(playerNames)
+    playerDropdown:Refresh(playerNames, true)
+end
+
+-- Initial update
+updatePlayerDropdown()
+
+-- Update when players join/leave
+Players.PlayerAdded:Connect(function()
+    task.wait() -- Small delay to ensure player is fully added
+    updatePlayerDropdown()
+end)
+
+Players.PlayerRemoving:Connect(function()
+    task.wait() -- Small delay to ensure player is fully removed
+    updatePlayerDropdown()
+end)
+
+Utility:Button({
+    Title = "Go to Player",
+    Desc = "Teleports to the selected player",
+    Callback = function()
+        local selectedName = getgenv().selectedPlayerToTeleport
+        if not selectedName then
+            WindUI:Notify({Title = "Error", Content = "No player selected", Duration = 3})
+            return
+        end
+        
+        local targetPlayer = Players:FindFirstChild(selectedName)
+        if not targetPlayer then
+            WindUI:Notify({Title = "Error", Content = "Player not found", Duration = 3})
+            return
+        end
+        
+        local character = LocalPlayer.Character
+        local targetCharacter = targetPlayer.Character
+        if not character or not targetCharacter then
+            WindUI:Notify({Title = "Error", Content = "Character not found", Duration = 3})
+            return
+        end
+        
+        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+        local targetRootPart = targetCharacter:FindFirstChild("HumanoidRootPart")
+        if not humanoidRootPart or not targetRootPart then
+            WindUI:Notify({Title = "Error", Content = "Root part not found!", Duration = 3})
+            return
+        end
+        
+        -- Calculate position 5 studs behind the target
+        local targetCFrame = targetRootPart.CFrame
+        local behindOffset = targetCFrame.LookVector * -2
+        local targetPosition = targetCFrame.Position + behindOffset
+        
+        -- Teleport to the calculated position
+        character:PivotTo(CFrame.new(targetPosition, targetCFrame.Position))
+    end
+})
+
 -- Invisibility Toggle
 local invisibilityEnabled = false
 local invisibilityCleanup
@@ -3305,6 +3426,7 @@ local autoSafeZoneEnabled = false
 local autoSafeZoneConnection = nil
 local lastPositionBeforeSafeZone = nil
 
+-- In the Auto Safezone section, replace the checkHealthAndTeleport function with this:
 local function checkHealthAndTeleport()
     local character = LocalPlayer.Character
     if not character then return end
@@ -3320,21 +3442,34 @@ local function checkHealthAndTeleport()
     
     -- If health is low and not in safezone, teleport to safezone
     if not inSafeZone and humanoid.Health <= getgenv().safeZoneHealthThreshold then
+        -- Store current position and rotation
         lastPositionBeforeSafeZone = rootPart.CFrame
         local safeZonePos = createSafeZone()
         character:PivotTo(CFrame.new(safeZonePos))
-        WindUI:Notify({Title = "Auto Safezone", Desc = "Teleported to safezone due to low health", Duration = 3})
+        WindUI:Notify({Title = "Auto Safezone", Content = "Teleported to safezone due to low health", Duration = 3})
     end
     
     -- If health is restored and in safezone, teleport back
     if inSafeZone and humanoid.Health >= getgenv().returnHealthThreshold and lastPositionBeforeSafeZone then
-        character:PivotTo(lastPositionBeforeSafeZone)
-        if safeZoneFolder then
-            safeZoneFolder:Destroy()
-            safeZoneFolder = nil
+        -- Check if the original position is safe (not in void)
+        local raycastParams = RaycastParams.new()
+        raycastParams.FilterDescendantsInstances = {character}
+        raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+        
+        local rayOrigin = lastPositionBeforeSafeZone.Position + Vector3.new(0, 5, 0)
+        local rayDirection = Vector3.new(0, -100, 0)
+        local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+        
+        if raycastResult then
+            character:PivotTo(lastPositionBeforeSafeZone)
+            if safeZoneFolder then
+                safeZoneFolder:Destroy()
+                safeZoneFolder = nil
+            end
+            WindUI:Notify({Title = "Auto Safezone", Content = "Returned from safezone - health restored", Duration = 3})
+            lastPositionBeforeSafeZone = nil
+        else
         end
-        WindUI:Notify({Title = "Auto Safezone", Desc = "Returned from safezone - health restored", Duration = 3})
-        lastPositionBeforeSafeZone = nil
     end
 end
 
