@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V4.2 Executed",
+            ["title"] = "Ink Game V4.3 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -83,7 +83,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V4.2",
+    Title = "Tuff Guys | Ink Game V4.3",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -99,7 +99,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V4.2",
+    Title = "Tuff Guys | Ink Game V4.3",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -129,8 +129,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V4.2",
-    Desc = "[~] Improved Key ESP\n[~] Improved Auto Perfect Jump\n[~] Improved Anti Fall\n[~] Improved Auto Pull Rope\n[+] Added Auto SafeZone\n[+] Added Player Teleport",
+    Title = "Changelogs V4.3",
+    Desc = "[~] Improved Auto Perfect Jump\n[+] Added Auto Balance for Auto Perfect Jump\n[+] Added Pull Rope Mods [BLATANT/LEGIT]\n[~] Fixed RLGL Godmode Being Active Always",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -566,14 +566,22 @@ local function AutoPerfectJumpRope()
         -- Jump using humanoid
         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
         
-        -- Fire the falling player remote every 0.45 seconds
-        if not getgenv().lastJumpTime or (tick() - getgenv().lastJumpTime) >= 0.45 then
-            local args = {
-                {
-                    FallingPlayer = true
-                }
-            }
-            game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable"):FireServer(unpack(args))
+        -- Simulate left + right click simultaneously (instead of firing remote)
+        local VirtualInputManager = game:GetService("VirtualInputManager")
+        
+        -- Left Click Down + Right Click Down
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)  -- Left
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 2)  -- Right
+        
+        -- Release after 0.05 seconds (quick tap)
+        task.wait(0.05)
+        
+        -- Left Click Up + Right Click Up
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)  -- Left
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 2)  -- Right
+        
+        -- Repeat every 0.5 seconds while rope is near
+        if not getgenv().lastJumpTime or (tick() - getgenv().lastJumpTime) >= 0.5 then
             getgenv().lastJumpTime = tick()
         end
     end
@@ -772,6 +780,12 @@ Main:Toggle({
         end
 
         if state then
+            -- Check if current game is RLGL
+            local currentGame = workspace:FindFirstChild("Values") and workspace.Values:FindFirstChild("CurrentGame")
+            if not currentGame or currentGame.Value ~= "RedLightGreenLight" then
+                return
+            end
+
             -- Show notification about executor compatibility
             WindUI:Notify({
                 Title = "RLGL Godmode", 
@@ -1560,8 +1574,8 @@ Main:Button({
 })
 
 Main:Toggle({
-    Title = "Auto Perfect Jump [BETA]",
-    Desc = "Automatically jumps when rope is close",
+    Title = "Auto Perfect Jump & Balance [BETA]",
+    Desc = "Automatically jumps when rope is close + clicks",
     Value = false,
     Callback = function(state)
         autoPerfectJumpEnabled = state
@@ -1864,48 +1878,95 @@ Main:Divider()
 
 local autoPullEnabled = false
 local autoPullCleanup
+local autoPullMode = "Blatant" -- Default mode
 
 function AutoPullRope(perfectPull)
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local RunService = game:GetService("RunService")
-    local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable")
-    
-    -- Show notification when activated
-    WindUI:Notify({
-        Title = "Auto Pull Rope",
-        Content = "Pulling Rope Automatically You will see the percentage fly for your team you will carry",
-        Duration = 5,
-    })
-
-    local connection
-    local function pull()
-        -- Faster pulling with optimized args
-        local args = perfectPull and {{GameQTE = true, Perfect = true}} or {{Failed = true}}
-        Remote:FireServer(unpack(args))
+    if autoPullMode == "Blatant" then
+        -- Original blatant mode code
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local RunService = game:GetService("RunService")
+        local Remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("TemporaryReachedBindable")
         
-        -- Additional fire for faster effect (adjust delay as needed)
-        task.wait(0.03)
-        Remote:FireServer(unpack(args))
-    end
+        -- Show notification when activated
+        WindUI:Notify({
+            Title = "Auto Pull Rope",
+            Content = "Pulling Rope Automatically You will see the percentage fly for your team you will carry",
+            Duration = 5,
+        })
 
-    -- Use RenderStepped for maximum speed
-    connection = RunService.RenderStepped:Connect(pull)
-    
-    -- Cleanup function
-    return function()
-        if connection then
-            connection:Disconnect()
-            connection = nil
+        local connection
+        local function pull()
+            -- Faster pulling with optimized args
+            local args = perfectPull and {{GameQTE = true, Perfect = true}} or {{Failed = true}}
+            Remote:FireServer(unpack(args))
+            
+            -- Additional fire for faster effect (adjust delay as needed)
+            task.wait(0.03)
+            Remote:FireServer(unpack(args))
+        end
+
+        -- Use RenderStepped for maximum speed
+        connection = RunService.RenderStepped:Connect(pull)
+        
+        -- Cleanup function
+        return function()
+            if connection then
+                connection:Disconnect()
+                connection = nil
+            end
+        end
+    else
+        -- New legit mode code
+        local connection
+        local function checkAndPull()
+            local playerGui = game:GetService("Players").LocalPlayer.PlayerGui
+            if not playerGui:FindFirstChild("QTEEvents") then return end
+            
+            local progress = playerGui.QTEEvents.Progress
+            if not progress or not progress:FindFirstChild("GoalDot") or not progress:FindFirstChild("CrossHair") then return end
+            
+            local goalDot = progress.GoalDot
+            local crossHair = progress.CrossHair
+            
+            -- Check if crosshair rotation matches goal dot rotation
+            if math.abs(crossHair.AbsoluteRotation - goalDot.AbsoluteRotation) < 2 then
+                -- Simulate mouse click
+                local VirtualInputManager = game:GetService("VirtualInputManager")
+                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                task.wait(0.05)
+                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+            end
+        end
+
+        connection = RunService.RenderStepped:Connect(checkAndPull)
+        
+        return function()
+            if connection then
+                connection:Disconnect()
+                connection = nil
+            end
         end
     end
 end
 
-local autoPullEnabled = false
-local autoPullCleanup
+-- Add the mode dropdown
+Main:Dropdown({
+    Title = "Pull Mode",
+    Values = {"Blatant [BETA]", "Legit"},
+    Default = "Blatant [BETA]",
+    Callback = function(selected)
+        autoPullMode = selected
+        -- If auto pull is already running, restart it with new mode
+        if autoPullEnabled and autoPullCleanup then
+            autoPullCleanup()
+            autoPullCleanup = AutoPullRope(true)
+        end
+    end
+})
 
 Main:Toggle({
     Title = "Auto Pull Rope",
-    Desc = "Automatically pulls the rope with perfect timing ",
+    Desc = "Automatically pulls the rope with perfect timing",
     Value = false,
     Callback = function(state)
         autoPullEnabled = state
