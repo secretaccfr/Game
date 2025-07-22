@@ -316,6 +316,14 @@ local function AntiFallJumpRope()
             "COLLISIONCHECK"
         }
         
+        -- Also destroy COLLISION1 if it exists in Effects
+        if Workspace:FindFirstChild("Effects") then
+            local collision1 = Workspace.Effects:FindFirstChild("COLLISION1")
+            if collision1 then
+                collision1:Destroy()
+            end
+        end
+        
         for _, partName in ipairs(partsToDestroy) do
             local part = jumpRope:FindFirstChild(partName)
             if part then
@@ -353,6 +361,16 @@ local function AntiFallJumpRope()
         jumpRope.ChildAdded:Connect(function(child)
             if table.find({"FallColllisionYClient", "FallColllisionY", "COLLISIONCHECK"}, child.Name) then
                 task.wait(0.1) -- Small delay to ensure part is fully initialized
+                child:Destroy()
+            end
+        end)
+    end
+    
+    -- Also monitor Effects folder for COLLISION1 recreation
+    if Workspace:FindFirstChild("Effects") then
+        Workspace.Effects.ChildAdded:Connect(function(child)
+            if child.Name == "COLLISION1" then
+                task.wait(0.1)
                 child:Destroy()
             end
         end)
@@ -1405,21 +1423,6 @@ local originalDalgonaHook = nil
 local dalgonaRemoteName = "DALGONATEMPREMPTE"  -- Remote name for Dalgona game
 local dalgonaCompletionConnection = nil
 
-local function FixCamera()
-    if workspace.CurrentCamera then
-        pcall(function()
-            workspace.CurrentCamera:Destroy()
-        end)
-    end
-    local new = Instance.new("Camera")
-    new.Parent = workspace
-    workspace.CurrentCamera = new
-    new.CameraType = Enum.CameraType.Custom
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        new.CameraSubject = LocalPlayer.Character.Humanoid
-    end
-end
-
 local function AutoCompleteDalgona()
     pcall(function()
         local remote = game:GetService("ReplicatedStorage").Remotes:FindFirstChild(dalgonaRemoteName)
@@ -1428,11 +1431,6 @@ local function AutoCompleteDalgona()
             remote:FireServer({Success = true})
             remote:FireServer({Completed = true})
             remote:FireServer({Perfect = true})
-            
-            -- Fix camera if it gets stuck
-            if workspace.CurrentCamera.CameraType == Enum.CameraType.Scriptable then
-                FixCamera()
-            end
         end
     end)
 end
