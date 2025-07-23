@@ -1559,53 +1559,77 @@ Main:Button({
     end
 })
 
--- Auto Balance Variables
+-- Add this to your Jump Rope section
 local autoBalanceEnabled = false
-local autoBalanceConnection = nil
+local autoBalanceConnection
 
 local function AutoBalanceJumpRope()
-    if not autoBalanceEnabled then return end
-    
-    -- Check if we're in the jump rope game
     local character = LocalPlayer.Character
     if not character then return end
     
-    -- Check if we have the jump rope UI active
-    local impactFrames = LocalPlayer.PlayerGui:FindFirstChild("ImpactFrames")
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then return end
+    
+    -- Check if we're in the jump rope game
+    if not character:GetAttribute("JumpRopeZone") then return end
+    
+    -- Find the balance UI elements
+    local playerGui = LocalPlayer.PlayerGui
+    local impactFrames = playerGui:FindFirstChild("ImpactFrames")
     if not impactFrames then return end
     
-    local jumpRopeUI = impactFrames:FindFirstChild("Main") -- The jump rope UI element
-    if not jumpRopeUI then return end
+    local mainFrame = impactFrames:FindFirstChild("Main")
+    if not mainFrame then return end
     
-    -- Get the current balance value
-    local numberValue = jumpRopeUI:FindFirstChildWhichIsA("NumberValue")
-    if not numberValue then return end
+    local indicator = mainFrame:FindFirstChild("Indicator")
+    if not indicator then return end
     
-    local currentValue = numberValue.Value
+    -- Get the current position of the indicator
+    local currentPosition = indicator.Position.X.Scale
     
-    -- Determine which direction to press based on current value
-    if currentValue > 10 then
-        -- Press left (A key)
-        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.A, false, game)
-        task.wait(0.05)
-        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.A, false, game)
-    elseif currentValue < -10 then
-        -- Press right (D key)
-        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.D, false, game)
-        task.wait(0.05)
-        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.D, false, game)
+    -- Determine which direction to press
+    if currentPosition < 0.48 then -- Too far left, press right
+        -- Simulate right key press (D key or right side tap)
+        if UserInputService.TouchEnabled then
+            -- For mobile, simulate right side tap
+            local screenSize = workspace.CurrentCamera.ViewportSize
+            VirtualInputManager:SendMouseButtonEvent(screenSize.X * 0.75, screenSize.Y/2, 0, true, game, 1)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(screenSize.X * 0.75, screenSize.Y/2, 0, false, game, 1)
+        else
+            -- For PC, simulate D key press
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.D, false, game)
+            task.wait(0.05)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.D, false, game)
+        end
+    elseif currentPosition > 0.52 then -- Too far right, press left
+        -- Simulate left key press (A key or left side tap)
+        if UserInputService.TouchEnabled then
+            -- For mobile, simulate left side tap
+            local screenSize = workspace.CurrentCamera.ViewportSize
+            VirtualInputManager:SendMouseButtonEvent(screenSize.X * 0.25, screenSize.Y/2, 0, true, game, 1)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(screenSize.X * 0.25, screenSize.Y/2, 0, false, game, 1)
+        else
+            -- For PC, simulate A key press
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.A, false, game)
+            task.wait(0.05)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.A, false, game)
+        end
     end
 end
 
--- Auto Balance Toggle
+-- Add this toggle to your Jump Rope section
 Main:Toggle({
-    Title = "Auto Balance [BETA]",
-    Desc = "Automatically balances the jump rope indicator",
+    Title = "Auto Balance",
+    Desc = "Automatically balances during jump rope",
     Value = false,
     Callback = function(state)
         autoBalanceEnabled = state
         if state then
-            autoBalanceConnection = RunService.Heartbeat:Connect(AutoBalanceJumpRope)
+            autoBalanceConnection = RunService.Heartbeat:Connect(function()
+                AutoBalanceJumpRope()
+            end)
         else
             if autoBalanceConnection then
                 autoBalanceConnection:Disconnect()
