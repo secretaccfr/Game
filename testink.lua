@@ -174,47 +174,6 @@ Window:SelectTab(1)
 
 local lplr = game:GetService("Players").LocalPlayer
 
-local function PlayerAimbot()
-    local RunService = game:GetService("RunService")
-    local Camera = workspace.CurrentCamera
-    local lplr = game:GetService("Players").LocalPlayer
-    
-    local function getNearestPlayer()
-        local closest, dist = nil, math.huge
-        local lroot = lplr.Character and lplr.Character:FindFirstChild("HumanoidRootPart")
-        if not lroot then return end
-
-        for _, player in pairs(game:GetService("Players"):GetPlayers()) do
-            if player ~= lplr and player.Character then
-                local root = player.Character:FindFirstChild("HumanoidRootPart")
-                local hum = player.Character:FindFirstChild("Humanoid")
-                if root and hum and hum.Health > 0 then
-                    local distance = (root.Position - lroot.Position).Magnitude
-                    if distance < dist then
-                        closest = root
-                        dist = distance
-                    end
-                end
-            end
-        end
-        return closest
-    end
-
-    local connection
-    connection = RunService.RenderStepped:Connect(function()
-        local target = getNearestPlayer()
-        if not target then return end
-        
-        local camPos = Camera.CFrame.Position
-        local lookVector = (target.Position - camPos).Unit
-        Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(camPos, camPos + lookVector), 0.2)
-    end)
-
-    return function() -- Cleanup
-        connection:Disconnect()
-    end
-end
-
 local function HandleRedLightGreenLight()
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -1589,33 +1548,15 @@ local function AutoBalanceJumpRope()
     
     -- Determine which direction to press
     if currentPosition < 0.48 then -- Too far left, press right
-        -- Simulate right key press (D key or right side tap)
-        if UserInputService.TouchEnabled then
-            -- For mobile, simulate right side tap
-            local screenSize = workspace.CurrentCamera.ViewportSize
-            VirtualInputManager:SendMouseButtonEvent(screenSize.X * 0.75, screenSize.Y/2, 0, true, game, 1)
-            task.wait(0.05)
-            VirtualInputManager:SendMouseButtonEvent(screenSize.X * 0.75, screenSize.Y/2, 0, false, game, 1)
-        else
-            -- For PC, simulate D key press
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.D, false, game)
-            task.wait(0.05)
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.D, false, game)
-        end
+        -- Simulate D key press
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.D, false, game)
+        task.wait(0.05)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.D, false, game)
     elseif currentPosition > 0.52 then -- Too far right, press left
-        -- Simulate left key press (A key or left side tap)
-        if UserInputService.TouchEnabled then
-            -- For mobile, simulate left side tap
-            local screenSize = workspace.CurrentCamera.ViewportSize
-            VirtualInputManager:SendMouseButtonEvent(screenSize.X * 0.25, screenSize.Y/2, 0, true, game, 1)
-            task.wait(0.05)
-            VirtualInputManager:SendMouseButtonEvent(screenSize.X * 0.25, screenSize.Y/2, 0, false, game, 1)
-        else
-            -- For PC, simulate A key press
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.A, false, game)
-            task.wait(0.05)
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.A, false, game)
-        end
+        -- Simulate A key press
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.A, false, game)
+        task.wait(0.05)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.A, false, game)
     end
 end
 
@@ -2513,24 +2454,6 @@ Combat:Toggle({
         elseif guardAimbotCleanup then
             guardAimbotCleanup()
             guardAimbotCleanup = nil
-        end
-    end
-})
-
-Combat:Toggle({
-    Title = "Player Aimbot",
-    Desc = "Automatically aims at the nearest player",
-    Value = false,
-    Callback = function(state)
-        if state then
-            local cleanup = PlayerAimbot()
-            -- Store cleanup function to disable later
-            getgenv().PlayerAimbotCleanup = cleanup
-        else
-            if getgenv().PlayerAimbotCleanup then
-                getgenv().PlayerAimbotCleanup()
-                getgenv().PlayerAimbotCleanup = nil
-            end
         end
     end
 })
