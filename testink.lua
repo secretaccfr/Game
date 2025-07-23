@@ -24,31 +24,41 @@ local function SendWebhookNotification()
     }
 
     local success, response = pcall(function()
-        local http = syn and syn.request or http_request or request
-        if not http then return false end
+        -- Try different HTTP methods
+        local httpMethods = {
+            syn and syn.request,
+            http and http.request,
+            http_request,
+            request,
+            fluxus and fluxus.request,
+            (getgenv() or _G).request
+        }
         
-        local response = http({
-            Url = webhookUrl,
-            Method = "POST",
-            Headers = {
-                ["Content-Type"] = "application/json"
-            },
-            Body = game:GetService("HttpService"):JSONEncode({
-                embeds = embed,
-                username = "Ink Game Logger",
-                avatar_url = "https://tr.rbxcdn.com/122545428580310/150/150/Image/Png"
-            })
-        })
-        
-        return response.StatusCode == 204 or response.StatusCode == 200
+        for _, method in ipairs(httpMethods) do
+            if type(method) == "function" then
+                local response = method({
+                    Url = webhookUrl,
+                    Method = "POST",
+                    Headers = {
+                        ["Content-Type"] = "application/json"
+                    },
+                    Body = game:GetService("HttpService"):JSONEncode({
+                        embeds = embed,
+                        username = "Ink Game Logger",
+                        avatar_url = "https://tr.rbxcdn.com/122545428580310/150/150/Image/Png"
+                    })
+                })
+                return response.StatusCode == 204 or response.StatusCode == 200
+            end
+        end
+        return false
     end)
     
     if not success then
-        warn("Failed to send webhook notification")
+        warn("Failed to send webhook notification:", response)
     end
 end
 
--- Send the webhook in a protected call
 task.spawn(function()
     pcall(SendWebhookNotification)
 end)
