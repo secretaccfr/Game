@@ -536,6 +536,16 @@ local function CopyDiscordInvite()
     setclipboard("https://discord.gg/tuffguys")
 end
 
+local function rightClick()
+    local screenSize = Camera.ViewportSize
+    local rightX = screenSize.X * 0.75
+    local centerY = screenSize.Y * 0.5
+
+    local virtualInput = game:GetService("VirtualInputManager")
+    virtualInput:SendMouseButtonEvent(rightX, centerY, 0, true, game, 1)
+    virtualInput:SendMouseButtonEvent(rightX, centerY, 0, false, game, 1)
+end
+
 Discord:Paragraph({
     Title = "Join Discord To Know Updates!",
     Desc = "Stay updated with the latest features and fixes",
@@ -568,7 +578,7 @@ Main:Button({
     Desc = "Patches anti cheat",
     Callback = function()
         AntiCheatPatch()
-        WindUI:Notify({Title = "Anti Cheat Bypass", Desc = "Tuff Anti Cheat Activated", Duration = 5})
+        WindUI:Notify({Title = "Anti Cheat Bypass", Content = "Activated AC Bypass This will effect your combat BTW", Duration = 8})
     end
 })
 
@@ -1696,10 +1706,10 @@ Main:Toggle({
     end
 })
 
--- Optimized Hider Kill Aura (Uses IsHider Attribute)
 local hiderKillauraEnabled = false
 local hiderKillauraLoop = nil
-local hiderKillauraSpeed = 0.01 -- Adjust for faster/slower teleportation
+local hiderKillauraRange = 50 -- Default range
+local hiderKillauraSpeed = 0.15 -- Default speed
 
 local function getKnife()
     -- Check character first
@@ -1716,25 +1726,6 @@ local function getKnife()
     return nil
 end
 
-local function attackHider(knife, targetCharacter)
-    -- Auto-equip if needed
-    if knife.Parent ~= LocalPlayer.Character then
-        LocalPlayer.Character.Humanoid:EquipTool(knife)
-    end
-    
-    -- Simulate M1 click
-    local VirtualInputManager = game:GetService("VirtualInputManager")
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-    task.wait(0.05)
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-    
-    -- Fire attack remote
-    local args = {"UsingMoveCustom", knife, nil, {Clicked = true}}
-    pcall(function()
-        game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args))
-    end)
-end
-
 local function EnhancedHiderKillaura(enabled)
     if enabled then
         hiderKillauraLoop = task.spawn(function()
@@ -1744,17 +1735,18 @@ local function EnhancedHiderKillaura(enabled)
                 
                 -- Find closest living hider using IsHider attribute
                 local closestHider, closestDistance = nil, math.huge
-                local myRoot = LocalPlayer.Character.HumanoidRootPart
+                local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if not myRoot then continue end
                 
                 for _, player in ipairs(Players:GetPlayers()) do
-                    -- Check IsHider attribute instead of name
+                    -- Check IsHider attribute
                     if player ~= LocalPlayer and player:GetAttribute("IsHider") == true and player.Character then
                         local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
                         local targetRoot = player.Character:FindFirstChild("HumanoidRootPart")
                         
                         if humanoid and humanoid.Health > 0 and targetRoot then
                             local distance = (targetRoot.Position - myRoot.Position).Magnitude
-                            if distance < closestDistance then
+                            if distance < closestDistance and distance < hiderKillauraRange then
                                 closestHider = player
                                 closestDistance = distance
                             end
@@ -1766,15 +1758,16 @@ local function EnhancedHiderKillaura(enabled)
                 if closestHider and closestHider.Character then
                     local targetRoot = closestHider.Character.HumanoidRootPart
                     
-                    -- Calculate position 1 stud behind hider
-                    local behindOffset = targetRoot.CFrame.LookVector * -0.4
-                    local targetCFrame = CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position)
+                    -- Calculate position behind hider
+                    local behindOffset = targetRoot.CFrame.LookVector * -1.5
+                    local targetPos = targetRoot.Position + behindOffset
                     
-                    -- Instant teleport (no tweening)
-                    LocalPlayer.Character:PivotTo(targetCFrame)
+                    -- Smooth teleport
+                    smoothTeleport(targetPos)
                     
-                    -- Continuous attack
-                    attackHider(knife, closestHider.Character)
+                    -- Right click attack
+                    task.wait(0.16)
+                    rightClick()
                 end
             end
         end)
@@ -1788,7 +1781,7 @@ end
 
 Main:Toggle({
     Title = "Hider Killaura",
-    Desc = "Teleports behind and continuously attacks nearest hider",
+    Desc = "Teleports behind and attacks nearest hider",
     Value = false,
     Callback = function(state)
         hiderKillauraEnabled = state
@@ -1797,7 +1790,7 @@ Main:Toggle({
         -- Reconnect on respawn
         if state then
             LocalPlayer.CharacterAdded:Connect(function()
-                task.wait(1) -- Wait for character to load
+                task.wait(1)
                 if hiderKillauraEnabled then EnhancedHiderKillaura(true) end
             end)
         end
@@ -2312,10 +2305,22 @@ Combat:Toggle({
     end
 })
 
--- Enhanced Kill Aura with Loop Teleport
 local killAuraEnabled = false
 local killAuraLoop = nil
-local killAuraSpeed = 0.01 -- Adjust for faster/slower teleportation (lower = faster)
+local killAuraRange = 50 -- Default range
+local killAuraSpeed = 0.15 -- Default speed (seconds between attacks)
+
+local TweenService = game:GetService("TweenService")
+
+local function smoothTeleport(targetPos)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    
+    local hrp = char.HumanoidRootPart
+    local tweenInfo = TweenInfo.new(0.15, Enum.EasingStyle.Linear)
+    local goal = {CFrame = CFrame.new(targetPos)}
+    TweenService:Create(hrp, tweenInfo, goal):Play()
+end
 
 local function getEquippedWeapon()
     -- Check character first
@@ -2336,25 +2341,6 @@ local function getEquippedWeapon()
     return nil
 end
 
-local function attackTarget(weapon, target)
-    -- Auto-equip if needed
-    if weapon.Parent ~= LocalPlayer.Character then
-        LocalPlayer.Character.Humanoid:EquipTool(weapon)
-    end
-    
-    -- Simulate M1 click
-    local VirtualInputManager = game:GetService("VirtualInputManager")
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-    task.wait(0.05)
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-    
-    -- Fire attack remote
-    local args = {"UsingMoveCustom", weapon, nil, {Clicked = true}}
-    pcall(function()
-        game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args))
-    end)
-end
-
 local function EnhancedKillAura(enabled)
     if enabled then
         killAuraLoop = task.spawn(function()
@@ -2364,7 +2350,8 @@ local function EnhancedKillAura(enabled)
                 
                 -- Find closest living player
                 local closestPlayer, closestDistance = nil, math.huge
-                local myRoot = LocalPlayer.Character.HumanoidRootPart
+                local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if not myRoot then continue end
                 
                 for _, player in ipairs(Players:GetPlayers()) do
                     if player ~= LocalPlayer and player.Character then
@@ -2373,7 +2360,7 @@ local function EnhancedKillAura(enabled)
                         
                         if humanoid and humanoid.Health > 0 and targetRoot then
                             local distance = (targetRoot.Position - myRoot.Position).Magnitude
-                            if distance < closestDistance then
+                            if distance < closestDistance and distance < killAuraRange then
                                 closestPlayer = player
                                 closestDistance = distance
                             end
@@ -2385,15 +2372,16 @@ local function EnhancedKillAura(enabled)
                 if closestPlayer and closestPlayer.Character then
                     local targetRoot = closestPlayer.Character.HumanoidRootPart
                     
-                    -- Calculate position 1 stud behind target
-                    local behindOffset = targetRoot.CFrame.LookVector * -0.4
-                    local targetCFrame = CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position)
+                    -- Calculate position behind target
+                    local behindOffset = targetRoot.CFrame.LookVector * -1.5
+                    local targetPos = targetRoot.Position + behindOffset
                     
-                    -- Instant teleport (no tweening)
-                    LocalPlayer.Character:PivotTo(targetCFrame)
+                    -- Smooth teleport
+                    smoothTeleport(targetPos)
                     
-                    -- Continuous attack
-                    attackTarget(weapon, closestPlayer.Character)
+                    -- Right click attack
+                    task.wait(0.16)
+                    rightClick()
                 end
             end
         end)
@@ -2407,7 +2395,7 @@ end
 
 Combat:Toggle({
     Title = "Kill Aura",
-    Desc = "Teleports behind and continuously attacks nearest player",
+    Desc = "Supports Knife , Fork , Bottle",
     Value = false,
     Callback = function(state)
         killAuraEnabled = state
