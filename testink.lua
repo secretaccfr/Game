@@ -4819,20 +4819,3 @@ Visual:Toggle({
         SetupDoorESP()
     end
 })
-
--- Handle character respawns for all toggles
-LocalPlayer.CharacterAdded:Connect(function(char)
-    task.wait(1) -- Wait for character to load
-    
-    if invisibilityEnabled then
-        -- Reapply invisibility
-        local toggle = Utility:FindFirstChild("Invisibility")
-        if toggle then toggle.Callback(true) end
-    end
-    
-    if guardAimbotEnabled then
-        -- Reapply guard aimbot
-        local toggle = Combat:FindFirstChild("Guard Aimbot")
-        if toggle then toggle.Callback(true) end
-    end
-end)
