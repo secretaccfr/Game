@@ -4,7 +4,7 @@ local function SendWebhookNotification()
     
     local embed = {
         {
-            ["title"] = "Ink Game V4.4 Executed",
+            ["title"] = "Ink Game V4.5 Executed",
             ["description"] = string.format(
                 "**Player:** `%s`\n"..
                 "**Display Name:** `%s`\n"..
@@ -83,7 +83,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Tuff Guys | Ink Game V4.4",
+    Title = "Tuff Guys | Ink Game V4.5",
     Icon = "rbxassetid://130506306640152",
     IconThemed = true,
     Author = "Tuff Agsy",
@@ -99,7 +99,7 @@ Window:SetBackgroundImageTransparency(0.8)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Tuff Guys | Ink Game V4.4",
+    Title = "Tuff Guys | Ink Game V4.5",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -129,8 +129,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V4.4",
-    Desc = "[+] Seperated Auto Balance From Auto Perfect Jump\n[~] Improved Auto Balance\n[~] Improved Legit Mode Tug Of War Pull",
+    Title = "Changelogs V4.5",
+    Desc = "[~] Improved Hider Kill Aura\n[~] Improved Kill Aura\n[~] Improved Auto Perfect Jump",
     Image = "rbxassetid://130506306640152",
 })
 
@@ -479,55 +479,59 @@ function AntiCheatPatch()
 end
 
 local function AutoPerfectJumpRope()
-    -- Check if jump rope game exists
+    -- Check if we're in the jump rope game
+    if not LocalPlayer.Character or not LocalPlayer.Character:GetAttribute("JumpRopeZone") then
+        return
+    end
+    
+    -- Find the rope effects
     local ropeEffects = workspace:FindFirstChild("Effects") and workspace.Effects:FindFirstChild("ropetesting")
     if not ropeEffects then return end
     
-    -- Find the rope's root part
-    local ropeRoot = ropeEffects:FindFirstChild("RootPart")
-    if not ropeRoot then return end
-    
-    -- Find all bone attachments (by name, case insensitive)
+    -- Find all bone attachments (more reliable detection)
     local boneAttachments = {}
-    for _, descendant in pairs(ropeRoot:GetDescendants()) do
-        if descendant.Name:lower():find("bone") and not descendant.Name:lower():find("^ok") then
+    for _, descendant in pairs(ropeEffects:GetDescendants()) do
+        if descendant:IsA("Attachment") and descendant.Name:lower():find("bone") then
             table.insert(boneAttachments, descendant)
         end
     end
     
-    -- If no bone attachments found, return
     if #boneAttachments == 0 then return end
     
-    -- Get player character and humanoid
+    -- Get character parts
     local character = LocalPlayer.Character
-    if not character then return end
-    
     local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-    
     local rootPart = character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then return end
+    if not humanoid or not rootPart then return end
     
-    -- Check distance to all bone attachments
-    local shouldJump = false
+    -- Calculate the closest bone and distance
+    local closestBone, minDistance = nil, math.huge
     for _, bone in ipairs(boneAttachments) do
         if bone.WorldPosition then
             local distance = (bone.WorldPosition - rootPart.Position).Magnitude
-            if distance <= 1 then
-                shouldJump = true
-                break
+            if distance < minDistance then
+                closestBone = bone
+                minDistance = distance
             end
         end
     end
     
-    -- Jump if any bone is close
-    if shouldJump then
-        -- Jump using humanoid
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        
-        -- Repeat every 0.5 seconds while rope is near
-        if not getgenv().lastJumpTime or (tick() - getgenv().lastJumpTime) >= 0.5 then
-            getgenv().lastJumpTime = tick()
+    -- Only jump if we're close enough to the rope (adjust threshold as needed)
+    if minDistance <= 2.5 then
+        -- Check if we're already jumping or falling
+        local state = humanoid:GetState()
+        if state ~= Enum.HumanoidStateType.Jumping and state ~= Enum.HumanoidStateType.Freefall then
+            -- Use different jump methods based on game version
+            if humanoid:FindFirstChild("Jump") then
+                -- Newer method using Jump property
+                humanoid.Jump = true
+            else
+                -- Older method using ChangeState
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+            
+            -- Small cooldown to prevent spamming
+            task.wait(0.2)
         end
     end
 end
