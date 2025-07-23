@@ -1309,73 +1309,6 @@ Main:Button({
     Callback = CompleteDalgona
 })
 
--- Dalgona Immunity Variables
-local dalgonaImmuneEnabled = false
-local originalDalgonaHook = nil
-local dalgonaRemoteName = "DALGONATEMPREMPTE"  -- Adjust if remote name differs
-local dalgonaCompletionConnection = nil
-
--- Helper function to safely complete Dalgona
-local function autoCompleteDalgona()
-    pcall(function()
-        local remote = game:GetService("ReplicatedStorage").Remotes:FindFirstChild(dalgonaRemoteName)
-        if remote then
-            -- Simulate perfect completion
-            remote:FireServer({Success = true})
-            remote:FireServer({Completed = true})
-            remote:FireServer({Perfect = true})
-        end
-    end)
-end
-
--- Main Immunity Function
-local function setDalgonaImmune(enabled)
-    if enabled then
-        -- Hook to block crack attempts
-        originalDalgonaHook = hookmetamethod(game, "__namecall", function(self, ...)
-            local method = getnamecallmethod()
-            local args = {...}
-
-            -- Block crack attempts silently
-            if tostring(self) == dalgonaRemoteName and method == "FireServer" then
-                if type(args[1]) == "table" and args[1].CrackAmount ~= nil then
-                    return nil  -- Block the crack
-                end
-            end
-
-            return originalDalgonaHook(self, ...)
-        end)
-
-        -- Auto-completion system
-        dalgonaCompletionConnection = workspace.ChildAdded:Connect(function(child)
-            if child.Name == "DalgonaGame" or child.Name == "Effects" then
-                task.wait(0.5)  -- Wait for game to initialize
-                autoCompleteDalgona()
-            end
-        end)
-
-        -- Also check existing instances
-        for _, child in pairs(workspace:GetChildren()) do
-            if child.Name == "DalgonaGame" or child.Name == "Effects" then
-                autoCompleteDalgona()
-                break
-            end
-        end
-    else
-        -- Cleanup
-        if originalDalgonaHook then
-            hookmetamethod(game, "__namecall", originalDalgonaHook)
-            originalDalgonaHook = nil
-        end
-
-        if dalgonaCompletionConnection then
-            dalgonaCompletionConnection:Disconnect()
-            dalgonaCompletionConnection = nil
-        end
-    end
-end
-
-
 -- Dalgona Crack Immunity System
 local dalgonaImmuneEnabled = false
 local originalDalgonaHook = nil
@@ -1398,11 +1331,6 @@ local function SetDalgonaImmune(enabled)
     if enabled then
         -- Check if hookmetamethod is available
         if not hookmetamethod then
-            WindUI:Notify({
-                Title = "Error", 
-                Desc = "Your executor doesn't support hookmetamethod!", 
-                Duration = 5
-            })
             return false
         end
 
@@ -1414,11 +1342,6 @@ local function SetDalgonaImmune(enabled)
             -- Block crack attempts silently
             if tostring(self) == dalgonaRemoteName and method == "FireServer" then
                 if type(args[1]) == "table" and args[1].CrackAmount ~= nil then
-                    WindUI:Notify({
-                        Title = "Dalgona", 
-                        Desc = "Prevented your cookie from cracking!", 
-                        Duration = 3
-                    })
                     return nil  -- Block the crack
                 end
             end
@@ -1441,8 +1364,7 @@ local function SetDalgonaImmune(enabled)
                 break
             end
         end
-
-        
+    else
         -- Cleanup
         if originalDalgonaHook then
             hookmetamethod(game, "__namecall", originalDalgonaHook)
@@ -1470,16 +1392,8 @@ Main:Toggle({
 -- Auto-reapply on character respawn
 LocalPlayer.CharacterAdded:Connect(function()
     if dalgonaImmuneEnabled then
-        task.wait(1)  -- Wait for character to load
-        SetDalgonaImmune(true)
-    end
-end)
-
--- Auto-reapply on character respawn
-LocalPlayer.CharacterAdded:Connect(function()
-    if dalgonaImmuneEnabled then
         task.wait(1)
-        setDalgonaImmune(true)
+        SetDalgonaImmune(true)
     end
 end)
 
@@ -1503,6 +1417,83 @@ Main:Button({
         end
     end
 })
+
+-- Add this to your Jump Rope section
+local autoBalanceEnabled = false
+local autoBalanceConnection = nil
+
+local function AutoBalanceJumpRope()
+    -- Check if we're in the jump rope balance state
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    
+    -- Check for the balance UI
+    local playerGui = LocalPlayer.PlayerGui
+    local impactFrames = playerGui:WaitForChild("ImpactFrames")
+    if not impactFrames then return end
+    
+    local balanceUI = impactFrames:FindFirstChild("Main") -- The balance meter UI
+    if not balanceUI then return end
+    
+    -- Get the current drift direction from the UI
+    local warningLabel = balanceUI:FindFirstChild("WarningLabel")
+    if not warningLabel then return end
+    
+    local text = warningLabel.Text
+    local isRightDirection = text:find("RIGHT") or text:find("B") or text:find("D")
+    local isLeftDirection = text:find("LEFT") or text:find("X") or text:find("A")
+    
+    -- Get the current balance value
+    local numberValue = nil
+    for _, child in pairs(impactFrames:GetChildren()) do
+        if child:IsA("NumberValue") then
+            numberValue = child
+            break
+        end
+    end
+    
+    if not numberValue then return end
+    
+    -- Determine which key to press based on balance drift
+    local shouldPressRight = numberValue.Value < -30
+    local shouldPressLeft = numberValue.Value > 30
+    
+    -- Press the appropriate key
+    if shouldPressRight or (isRightDirection and numberValue.Value < 0) then
+        -- Press right key (D, Right Arrow, or B depending on device)
+        if game:GetService("UserInputService").TouchEnabled then
+            -- Mobile - simulate right side tap
+            game:GetService("VirtualInputManager"):SendMouseButtonEvent(1, 0, 0, true, game, 1)
+            task.wait(0.05)
+            game:GetService("VirtualInputManager"):SendMouseButtonEvent(1, 0, 0, false, game, 1)
+        else
+            -- PC/Console - send key press
+            local key = isRightDirection and (text:find("B") and Enum.KeyCode.ButtonB or 
+                         (text:find("D") and Enum.KeyCode.D or Enum.KeyCode.Right)
+            game:GetService("VirtualInputManager"):SendKeyEvent(true, key, false, game)
+            task.wait(0.05)
+            game:GetService("VirtualInputManager"):SendKeyEvent(false, key, false, game)
+        end
+    elseif shouldPressLeft or (isLeftDirection and numberValue.Value > 0) then
+        -- Press left key (A, Left Arrow, or X depending on device)
+        if game:GetService("UserInputService").TouchEnabled then
+            -- Mobile - simulate left side tap
+            game:GetService("VirtualInputManager"):SendMouseButtonEvent(0, 0, 0, true, game, 1)
+            task.wait(0.05)
+            game:GetService("VirtualInputManager"):SendMouseButtonEvent(0, 0, 0, false, game, 1)
+        else
+            -- PC/Console - send key press
+            local key = isLeftDirection and (text:find("X") and Enum.KeyCode.ButtonX or 
+                         (text:find("A") and Enum.KeyCode.A or Enum.KeyCode.Left))
+            game:GetService("VirtualInputManager"):SendKeyEvent(true, key, false, game)
+            task.wait(0.05)
+            game:GetService("VirtualInputManager"):SendKeyEvent(false, key, false, game)
+        end
+    end
+end
 
 -- Add this toggle to your Jump Rope section
 Main:Toggle({
