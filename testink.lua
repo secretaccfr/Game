@@ -517,7 +517,7 @@ local function AutoPerfectJumpRope()
     end
     
     -- Only jump if we're close enough to the rope (adjust threshold as needed)
-    if minDistance <= 2.5 then
+    if minDistance <= 1.5 then
         -- Check if we're already jumping or falling
         local state = humanoid:GetState()
         if state ~= Enum.HumanoidStateType.Jumping and state ~= Enum.HumanoidStateType.Freefall then
